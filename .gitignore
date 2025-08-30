@@ -1,0 +1,25 @@
+__pycache__/*
+
+build/
+
+dist/
+
+logs/
+
+.csv
+
+.log
+
+reports/
+
+data/
+
+Misc files/
+
+piduguralla_date_reports/
+
+env/
+
+captured_images/
+
+date_reports/
