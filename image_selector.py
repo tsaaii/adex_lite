@@ -84,29 +84,75 @@ class ImageSelector:
         return selected_image
     
     def get_second_weighment_images(self, vehicle_no, first_timestamp=None):
-        """Automatically select second front and second back images
+        """Get images from the current hour folder in sb/sf directories
         
-        Args:
-            vehicle_no: Vehicle number
-            first_timestamp: Timestamp of first weighment (to find correct hour folder)
-        
-        Returns:
-            dict: Paths to selected sf and sb images
+        Looks for any .jpg files in data/images/VEHICLE/sb/HH/ and sf/HH/
+        where HH is the current hour (00-23)
         """
-        # Select second front image
-        sf_image = self.select_image_round_robin(vehicle_no, "sf", first_timestamp)
+        import os
+        import glob
+        import datetime
         
-        # Select second back image
-        sb_image = self.select_image_round_robin(vehicle_no, "sb", first_timestamp)
+        vehicle_no = vehicle_no.strip().upper()
+        
+        # Get current hour or use the hour from first_timestamp if provided
+        if first_timestamp:
+            try:
+                dt = datetime.datetime.strptime(first_timestamp, "%d-%m-%Y %H:%M:%S")
+            except:
+                dt = datetime.datetime.now()
+        else:
+            dt = datetime.datetime.now()
+        
+        # Get the hour folder (00-23)
+        hour_folder = dt.strftime("%H")
         
         result = {
-            "second_front": sf_image,
-            "second_back": sb_image
+            "second_front": None,
+            "second_back": None
         }
         
-        if sf_image or sb_image:
-            self.logger.info(f"Auto-selected images for {vehicle_no}: SF={sf_image is not None}, SB={sb_image is not None}")
+        # Look for images in sb/HH folder (second back)
+        sb_path = os.path.join("data", "images", vehicle_no, "sb", hour_folder)
+        if os.path.exists(sb_path):
+            sb_pattern = os.path.join(sb_path, "*.jpg")
+            sb_images = glob.glob(sb_pattern)
+            
+            if sb_images:
+                # Round-robin selection
+                counter_key = f"{vehicle_no}_sb_{hour_folder}"
+                if counter_key not in self.round_robin_counters:
+                    self.round_robin_counters[counter_key] = 0
+                
+                index = self.round_robin_counters[counter_key] % len(sb_images)
+                result["second_back"] = sb_images[index]
+                self.round_robin_counters[counter_key] += 1
+                
+                self.logger.info(f"Selected sb image from hour {hour_folder}: {result['second_back']}")
         else:
-            self.logger.warning(f"No second weighment images found for {vehicle_no}")
+            self.logger.info(f"No sb folder for hour {hour_folder}: {sb_path}")
+        
+        # Look for images in sf/HH folder (second front)
+        sf_path = os.path.join("data", "images", vehicle_no, "sf", hour_folder)
+        if os.path.exists(sf_path):
+            sf_pattern = os.path.join(sf_path, "*.jpg")
+            sf_images = glob.glob(sf_pattern)
+            
+            if sf_images:
+                # Round-robin selection
+                counter_key = f"{vehicle_no}_sf_{hour_folder}"
+                if counter_key not in self.round_robin_counters:
+                    self.round_robin_counters[counter_key] = 0
+                
+                index = self.round_robin_counters[counter_key] % len(sf_images)
+                result["second_front"] = sf_images[index]
+                self.round_robin_counters[counter_key] += 1
+                
+                self.logger.info(f"Selected sf image from hour {hour_folder}: {result['second_front']}")
+        else:
+            self.logger.info(f"No sf folder for hour {hour_folder}: {sf_path}")
+        
+        if not result["second_back"] and not result["second_front"]:
+            self.logger.warning(f"No images found in hour folder {hour_folder} for vehicle {vehicle_no}")
         
         return result
