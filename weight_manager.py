@@ -6,52 +6,493 @@ import datetime
 import random
 import time
 import config
+import logging
 
 class WeightManager:
     def __init__(self, main_form):
+        from vehicle_data_manager import VehicleDataManager
+        from image_selector import ImageSelector
+        from ticket_closer import TicketCloser        
         self.main_form = main_form
         self.last_weight = 0.0
         self.weight_capture_timeout = 5.0  # seconds to wait for stable weight
         self.min_weight_change = 0.0  # minimum kg change to consider valid weighment
-        
+
+    
+        self.vehicle_mgr = VehicleDataManager("data")
+        self.image_selector = ImageSelector("images")
+        self.ticket_closer = TicketCloser(self.vehicle_mgr, self.image_selector)
+        self.logger = logging.getLogger('WeightManager')        
+
+    def initialize_vehicle_systems(self):
+        """Initialize the vehicle management systems"""
+        try:
+            from vehicle_data_manager import VehicleDataManager
+            from image_selector import ImageSelector
+            from ticket_closer import TicketCloser
+            
+            self.vehicle_mgr = VehicleDataManager("data")
+            self.image_selector = ImageSelector("images")
+            self.ticket_closer = TicketCloser(self.vehicle_mgr, self.image_selector)
+            
+            # Flag to track if quick close is pending
+            self.quick_close_pending = False
+            self.quick_close_weight = None
+            
+            self.logger.info("Vehicle systems initialized successfully")
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to initialize vehicle systems: {e}")
+            self.vehicle_mgr = None
+            self.image_selector = None
+            self.ticket_closer = None
+            self.quick_close_pending = False
+            return False
+
     def capture_weight(self):
         """FIXED: Capture weight with corrected pending vehicle check"""
-        try:
-            print("=== CORRECTED WEIGHT CAPTURE ===")
+        # try:
+        #     print("=== CORRECTED WEIGHT CAPTURE ===")
             
-            # CORRECTED: Check vehicle status with proper logic for weighments
-            if not self.check_vehicle_for_weight_capture():
-                print("❌ WEIGHT CAPTURE BLOCKED - Vehicle check failed")
+        #     # CORRECTED: Check vehicle status with proper logic for weighments
+        #     if not self.check_vehicle_for_weight_capture():
+        #         print("❌ WEIGHT CAPTURE BLOCKED - Vehicle check failed")
+        #         return False
+            
+        #     print("✅ Vehicle check passed - proceeding with weight capture")
+            
+        #     # Check test mode first using improved method
+        #     if self.is_test_mode_enabled():
+        #         print("Test mode is enabled - generating random weight")
+        #         # Generate random weight - bypass all connection checks
+        #         weight = self.generate_random_weight()
+        #         print(f"Generated random weight: {weight} kg")
+                
+        #         # Update the current weight display
+        #         self.main_form.current_weight_var.set(f"{weight:.2f} kg")
+                
+        #         # Process the weight directly
+        #         self.process_captured_weight(weight)
+        #         return True
+                
+        #     else:
+        #         print("Test mode disabled - using real weighbridge")
+        #         # Enhanced: Use real weighbridge with improved error handling
+        #         return self.capture_real_weighbridge_weight()
+                
+        # except Exception as e:
+        #     print(f"Error in capture_weight: {e}")
+        #     import traceback
+        #     traceback.print_exc()
+        #     messagebox.showerror("Error", f"Failed to capture weight: {str(e)}")
+        #     return False
+
+        try:
+            # Get vehicle number
+            vehicle_no = self.main_form.vehicle_var.get().strip()
+            if not vehicle_no:
+                messagebox.showerror("Error", "Please enter vehicle number")
                 return False
             
-            print("✅ Vehicle check passed - proceeding with weight capture")
-            
-            # Check test mode first using improved method
+            # Get weight (from weighbridge or test mode)
             if self.is_test_mode_enabled():
-                print("Test mode is enabled - generating random weight")
-                # Generate random weight - bypass all connection checks
                 weight = self.generate_random_weight()
-                print(f"Generated random weight: {weight} kg")
-                
-                # Update the current weight display
-                self.main_form.current_weight_var.set(f"{weight:.2f} kg")
-                
-                # Process the weight directly
-                self.process_captured_weight(weight)
-                return True
-                
             else:
-                print("Test mode disabled - using real weighbridge")
-                # Enhanced: Use real weighbridge with improved error handling
-                return self.capture_real_weighbridge_weight()
+                weight = self.get_current_weighbridge_value()
+            
+            if weight is None:
+                return False
+            
+            if self.main_form.current_weighment == "first":
+                # Capture first weight
+                self.main_form.first_weight_var.set(f"{weight:.2f}")
+                timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+                self.main_form.first_timestamp_var.set(timestamp)
                 
+                # Check if vehicle can quick close
+                can_quick, empty_weight = self.ticket_closer.can_quick_close(vehicle_no)
+                
+                if can_quick:
+                    # Offer quick close
+                    response = messagebox.askyesno(
+                        "Quick Close Available",
+                        f"Vehicle has stored empty weight: {empty_weight:.1f} kg\n\n"
+                        f"Current weight: {weight:.1f} kg\n"
+                        f"Net weight would be: {abs(weight - empty_weight):.1f} kg\n\n"
+                        f"Do you want to quick close this ticket?"
+                    )
+                    
+                    if response:
+                        # Quick close the ticket
+                        self.perform_quick_close()
+                        return True
+                else:
+                    # No empty weight - must do second weighment
+                    messagebox.showinfo(
+                        "Second Weighment Required",
+                        "No stored empty weight found.\n"
+                        "Vehicle must return for second weighment."
+                    )
+                
+                # Move to second weighment state
+                self.main_form.current_weighment = "second"
+                self.main_form.weighment_state_var.set("Second Weighment")
+                
+            elif self.main_form.current_weighment == "second":
+                # Capture second weight
+                self.main_form.second_weight_var.set(f"{weight:.2f}")
+                timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+                self.main_form.second_timestamp_var.set(timestamp)
+                
+                # Calculate net weight
+                first_weight = float(self.main_form.first_weight_var.get())
+                net_weight = abs(first_weight - weight)
+                self.main_form.net_weight_var.set(f"{net_weight:.2f}")
+                
+                # Update empty weight (lighter = empty)
+                self.vehicle_mgr.update_from_weighment(vehicle_no, first_weight, weight)
+                
+                # Auto-select second weighment images
+                first_timestamp = self.main_form.first_timestamp_var.get()
+                images = self.image_selector.get_second_weighment_images(vehicle_no, first_timestamp)
+                
+                # Update image paths
+                if images['second_front']:
+                    self.main_form.second_front_image_path = images['second_front']
+                    self.logger.info(f"Auto-selected second front: {images['second_front']}")
+                
+                if images['second_back']:
+                    self.main_form.second_back_image_path = images['second_back']
+                    self.logger.info(f"Auto-selected second back: {images['second_back']}")
+                
+                # Update state
+                self.main_form.current_weighment = "complete"
+                self.main_form.weighment_state_var.set("Weighment Complete")
+                
+                messagebox.showinfo(
+                    "Second Weight Captured",
+                    f"Second weighment: {weight:.2f} kg\n"
+                    f"Net weight: {net_weight:.2f} kg\n\n"
+                    f"Images auto-selected from vehicle folder"
+                )
+            
+            return True
+            
         except Exception as e:
-            print(f"Error in capture_weight: {e}")
-            import traceback
-            traceback.print_exc()
+            self.logger.error(f"Error capturing weight: {e}")
             messagebox.showerror("Error", f"Failed to capture weight: {str(e)}")
             return False
+
+    def check_quick_close_available(self, weight):
+        """Check if quick close is available but DON'T offer it yet
+        
+        Call this after first weight capture to set the pending flag
+        """
+        try:
+            if not self.ticket_closer:
+                return False
+            
+            vehicle_no = self.main_form.vehicle_var.get().strip().upper()
+            can_quick, empty_weight = self.ticket_closer.can_quick_close(vehicle_no)
+            
+            if can_quick:
+                # Set pending flag - will offer after images are captured
+                self.quick_close_pending = True
+                self.quick_close_weight = weight
+                self.quick_close_empty_weight = empty_weight
+                self.logger.info(f"Quick close available for {vehicle_no} - will offer after images")
+                return True
+            else:
+                self.quick_close_pending = False
+                self.logger.info(f"No quick close available for {vehicle_no}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error checking quick close: {e}")
+            self.quick_close_pending = False
+            return False
     
+    def offer_quick_close_after_images(self):
+        """Offer quick close AFTER first weighment images are captured
+        
+        Call this after both first front and first back images are saved
+        """
+        try:
+            # Check if quick close is pending
+            if not self.quick_close_pending:
+                return False
+            
+            # Reset the pending flag
+            self.quick_close_pending = False
+            
+            # Check that we have the first weighment images
+            if not self.main_form.first_front_image_path or not self.main_form.first_back_image_path:
+                self.logger.warning("Cannot offer quick close - first images not captured")
+                messagebox.showinfo(
+                    "Images Required",
+                    "Please capture first front and back images before closing ticket."
+                )
+                return False
+            
+            vehicle_no = self.main_form.vehicle_var.get().strip().upper()
+            weight = self.quick_close_weight
+            empty_weight = self.quick_close_empty_weight
+            
+            # Calculate net weight
+            net_weight = abs(weight - empty_weight)
+            
+            # Now offer quick close
+            response = messagebox.askyesno(
+                "Quick Close Available",
+                f"First weighment images captured successfully!\n\n"
+                f"Vehicle has stored empty weight: {empty_weight:.1f} kg\n"
+                f"Current weight: {weight:.1f} kg\n"
+                f"Net weight would be: {net_weight:.1f} kg\n\n"
+                f"Do you want to quick close this ticket?"
+            )
+            
+            if response:
+                # Perform quick close
+                return self.perform_quick_close()
+            else:
+                # User declined - continue to second weighment
+                self.main_form.current_weighment = "second"
+                self.main_form.weighment_state_var.set("Second Weighment")
+                messagebox.showinfo(
+                    "Continue to Second Weighment",
+                    "Vehicle can now exit and return for second weighment."
+                )
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error offering quick close: {e}")
+            return False
+    
+    def perform_quick_close(self):
+        """Perform quick close - images already captured"""
+        try:
+            if not self.ticket_closer:
+                return False
+            
+            vehicle_no = self.main_form.vehicle_var.get().strip().upper()
+            first_weight = float(self.main_form.first_weight_var.get())
+            first_timestamp = self.main_form.first_timestamp_var.get()
+            
+            # Quick close
+            result = self.ticket_closer.quick_close(vehicle_no, first_weight, first_timestamp)
+            
+            if result:
+                # Update form fields
+                self.main_form.second_weight_var.set(f"{result['second_weight']:.2f}")
+                self.main_form.second_timestamp_var.set(result['second_timestamp'])
+                self.main_form.net_weight_var.set(f"{result['net_weight']:.2f}")
+                
+                # Auto-select second weighment images from vehicle folder
+                if result.get('second_front_image'):
+                    self.main_form.second_front_image_path = result['second_front_image']
+                    self.logger.info(f"Auto-selected second front: {result['second_front_image']}")
+                
+                if result.get('second_back_image'):
+                    self.main_form.second_back_image_path = result['second_back_image']
+                    self.logger.info(f"Auto-selected second back: {result['second_back_image']}")
+                
+                # Update state
+                self.main_form.current_weighment = "complete"
+                self.main_form.weighment_state_var.set("Weighment Complete")
+                
+                # Update image status display
+                if hasattr(self.main_form, 'update_image_status_display'):
+                    self.main_form.update_image_status_display()
+                
+                messagebox.showinfo(
+                    "Quick Close Success",
+                    f"Ticket closed successfully!\n\n"
+                    f"Net Weight: {result['net_weight']:.2f} kg\n"
+                    f"Method: Quick close with stored empty weight\n\n"
+                    f"Second weighment images auto-selected from vehicle folder"
+                )
+                
+                return True
+                
+        except Exception as e:
+            self.logger.error(f"Error in quick close: {e}")
+            messagebox.showerror("Error", f"Failed to quick close: {str(e)}")
+            return False
+    
+    def process_first_weighment(self, weight):
+        """Process first weighment - just save weight, check quick close availability"""
+        try:
+            # Save first weight
+            self.main_form.first_weight_var.set(f"{weight:.2f}")
+            timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+            self.main_form.first_timestamp_var.set(timestamp)
+            
+            # Check if quick close is available (but don't offer yet)
+            has_quick_close = self.check_quick_close_available(weight)
+            
+            # Move to second weighment state
+            self.main_form.current_weighment = "second"
+            self.main_form.weighment_state_var.set("Second Weighment")
+            
+            mode_text = "TEST MODE" if self.is_test_mode_enabled() else "WEIGHBRIDGE"
+            
+            if has_quick_close:
+                # Inform user but don't offer quick close yet
+                messagebox.showinfo(
+                    "First Weight Captured",
+                    f"First weighment: {weight:.2f} kg\n"
+                    f"Time: {timestamp}\n"
+                    f"Mode: {mode_text}\n\n"
+                    "✓ Quick close will be available after capturing images.\n"
+                    "Please capture first front and back images."
+                )
+            else:
+                # No quick close available
+                vehicle_no = self.main_form.vehicle_var.get().strip().upper()
+                messagebox.showinfo(
+                    "First Weight Captured - Second Weighment Required",
+                    f"First weighment: {weight:.2f} kg\n"
+                    f"Time: {timestamp}\n"
+                    f"Mode: {mode_text}\n\n"
+                    f"⚠ No stored empty weight for {vehicle_no}\n"
+                    "Vehicle must return for second weighment."
+                )
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error processing first weighment: {e}")
+            return False
+    
+    def process_second_weighment_with_images(self, weight):
+        """Process actual second weighment with auto image selection"""
+        try:
+            vehicle_no = self.main_form.vehicle_var.get().strip().upper()
+            
+            # Set second weight
+            self.main_form.second_weight_var.set(f"{weight:.2f}")
+            timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+            self.main_form.second_timestamp_var.set(timestamp)
+            
+            # Get first weight
+            first_weight = float(self.main_form.first_weight_var.get())
+            
+            # Calculate net weight
+            net_weight = abs(first_weight - weight)
+            self.main_form.net_weight_var.set(f"{net_weight:.2f}")
+            
+            # Update empty weight
+            if self.vehicle_mgr:
+                self.vehicle_mgr.update_from_weighment(vehicle_no, first_weight, weight)
+            
+            # Auto-select second weighment images
+            if self.image_selector:
+                first_timestamp = self.main_form.first_timestamp_var.get()
+                images = self.image_selector.get_second_weighment_images(vehicle_no, first_timestamp)
+                
+                if images.get('second_front'):
+                    self.main_form.second_front_image_path = images['second_front']
+                    self.logger.info(f"Auto-selected second front: {images['second_front']}")
+                
+                if images.get('second_back'):
+                    self.main_form.second_back_image_path = images['second_back']
+                    self.logger.info(f"Auto-selected second back: {images['second_back']}")
+            
+            # Update state
+            self.main_form.current_weighment = "complete"
+            self.main_form.weighment_state_var.set("Weighment Complete")
+            
+            # Update image display
+            if hasattr(self.main_form, 'update_image_status_display'):
+                self.main_form.update_image_status_display()
+            
+            messagebox.showinfo(
+                "Second Weight Captured",
+                f"Second weighment: {weight:.2f} kg\n"
+                f"Net weight: {net_weight:.2f} kg\n\n"
+                f"Images auto-selected from vehicle folder"
+            )
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error processing second weighment: {e}")
+            return False
+    
+    def check_and_offer_quick_close_if_ready(self):
+        """Helper method to check if both first images are captured and offer quick close
+        
+        Call this from your image capture methods after saving images
+        """
+        # Only proceed if quick close is pending
+        if not self.quick_close_pending:
+            return
+        
+        # Check if both first weighment images are captured
+        if self.main_form.first_front_image_path and self.main_form.first_back_image_path:
+            self.logger.info("Both first weighment images captured - offering quick close")
+            self.offer_quick_close_after_images()
+    # Add this method to allow manual closing
+    def close_ticket_manually(self):
+        """Allow manual ticket closing without second weighment"""
+        try:
+            # Check if first weight exists
+            if not self.main_form.first_weight_var.get():
+                messagebox.showerror("Error", "Please capture first weight before closing")
+                return
+            
+            vehicle_no = self.main_form.vehicle_var.get()
+            
+            # Check for quick close option
+            can_quick, empty_weight = self.ticket_closer.can_quick_close(vehicle_no)
+            
+            if can_quick:
+                # Use quick close
+                self.perform_quick_close()
+            else:
+                # Ask for manual weight
+                import tkinter.simpledialog as simpledialog
+                weight_str = simpledialog.askstring(
+                    "Manual Weight Entry",
+                    f"Enter second weight for {vehicle_no} (kg):"
+                )
+                
+                if weight_str:
+                    try:
+                        second_weight = float(weight_str)
+                        first_weight = float(self.main_form.first_weight_var.get())
+                        first_timestamp = self.main_form.first_timestamp_var.get()
+                        
+                        # Manual close
+                        result = self.ticket_closer.manual_close(
+                            vehicle_no, first_weight, second_weight, first_timestamp
+                        )
+                        
+                        if result:
+                            # Update form
+                            self.main_form.second_weight_var.set(f"{result['second_weight']:.2f}")
+                            self.main_form.second_timestamp_var.set(result['second_timestamp'])
+                            self.main_form.net_weight_var.set(f"{result['net_weight']:.2f}")
+                            
+                            # Update images
+                            if result['second_front_image']:
+                                self.main_form.second_front_image_path = result['second_front_image']
+                            if result['second_back_image']:
+                                self.main_form.second_back_image_path = result['second_back_image']
+                            
+                            messagebox.showinfo(
+                                "Manual Close Success",
+                                f"Ticket closed with manual weight!\n\n"
+                                f"Net Weight: {result['net_weight']:.2f} kg"
+                            )
+                            
+                    except ValueError:
+                        messagebox.showerror("Invalid Input", "Please enter a valid number")
+        
+        except Exception as e:
+            self.logger.error(f"Error in manual close: {e}")
+            messagebox.showerror("Error", f"Failed to close ticket: {str(e)}")
+
     def check_vehicle_for_weight_capture(self):
         """FIXED: Check vehicle status for weight capture with corrected logic"""
         try:

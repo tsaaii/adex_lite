@@ -335,6 +335,9 @@ class ImageHandler:
             # Update the appropriate image path based on weighment stage
             if image_weighment == "first":
                 self.main_form.first_front_image_path = filepath
+                if hasattr(self.main_form, 'weight_manager'):
+                    if hasattr(self.main_form.weight_manager, 'check_and_offer_quick_close_if_ready'):
+                        self.main_form.weight_manager.check_and_offer_quick_close_if_ready()
             else:
                 self.main_form.second_front_image_path = filepath
                 # ALSO save to vehicle folder structure for second weighment (sf folder)
@@ -446,6 +449,9 @@ class ImageHandler:
             # Update the appropriate image path based on weighment stage
             if image_weighment == "first":
                 self.main_form.first_back_image_path = filepath
+                if hasattr(self.main_form, 'weight_manager'):
+                    if hasattr(self.main_form.weight_manager, 'check_and_offer_quick_close_if_ready'):
+                        self.main_form.weight_manager.check_and_offer_quick_close_if_ready()                
             else:
                 self.main_form.second_back_image_path = filepath
                 # ALSO save to vehicle folder structure for second weighment (sb folder)
@@ -513,6 +519,10 @@ class ImageHandler:
                 self.update_image_status()
                 self._force_ui_update()
                 print(f"✅ First front image saved (no watermark): {filename}")
+                if hasattr(self.main_form, 'weight_manager'):
+                    if hasattr(self.main_form.weight_manager, 'check_and_offer_quick_close_if_ready'):
+                        self.main_form.weight_manager.check_and_offer_quick_close_if_ready()
+    
                 return True
             else:
                 print("ERROR: Failed to save first front image")
@@ -566,6 +576,9 @@ class ImageHandler:
                 self.update_image_status()
                 self._force_ui_update()
                 print(f"✅ First back image saved (no watermark): {filename}")
+                if hasattr(self.main_form, 'weight_manager'):
+                    if hasattr(self.main_form.weight_manager, 'check_and_offer_quick_close_if_ready'):
+                        self.main_form.weight_manager.check_and_offer_quick_close_if_ready()
                 return True
             else:
                 print("ERROR: Failed to save first back image")
