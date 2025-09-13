@@ -795,15 +795,37 @@ class SettingsPanel:
     
 
     def calculate_passcode(self):
-        """Calculate unique passcode based on current date and last ticket number"""
+        """Calculate unique passcode based on site name first letter and day name first letter"""
         try:
             import datetime
+            
+            # Get current day name
             current_date = datetime.datetime.now()
-            date_day = current_date.day
-            current_ticket_number = self.settings_storage.get_ticket_counter()
-            ticket_digits_sum = sum(int(digit) for digit in str(current_ticket_number) if digit.isdigit())
-            return date_day + ticket_digits_sum
-        except:
+            day_name = current_date.strftime('%A')  # Returns full day name like "Saturday"
+            
+            # Get site name (from config or settings)
+            if hasattr(config, 'HARDCODED_SITE') and config.HARDCODED_SITE:
+                site_name = config.HARDCODED_SITE
+            else:
+                # Fallback to get from settings if not hardcoded
+                site_name = "Default"  # You can modify this based on your settings structure
+            
+            # Get first letter of site name and convert to number (A=1, B=2, ... Z=26)
+            site_first_letter = site_name[0].upper()
+            site_number = ord(site_first_letter) - ord('A') + 1
+            
+            # Get first letter of day name and convert to number
+            day_first_letter = day_name[0].upper()
+            day_number = ord(day_first_letter) - ord('A') + 1
+            
+            # Calculate passcode
+            passcode = site_number + day_number
+            
+            print(f"DEBUG: Site='{site_name}' -> {site_first_letter}={site_number}, Day='{day_name}' -> {day_first_letter}={day_number}, Passcode={passcode}")
+            return passcode
+            
+        except Exception as e:
+            print(f"Error calculating passcode: {e}")
             return 0
 
     def check_passcode(self, *args):
