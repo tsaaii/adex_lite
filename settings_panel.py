@@ -274,6 +274,40 @@ class SettingsPanel:
         except Exception as e:
             print(f"Error loading camera settings: {e}")
 
+
+    def on_stability_readings_change(self, *args):
+        """Called whenever user changes the Stability Readings spinbox (1-10)"""
+        try:
+            # Get the current value from the spinbox
+            stability_value = self.stability_var.get()
+            
+            # Ensure it's within valid range (1-9 as user requested)
+            if stability_value < 1:
+                stability_value = 1
+                self.stability_var.set(1)
+            elif stability_value > 9:
+                stability_value = 9
+                self.stability_var.set(9)
+            
+            # Update the global config immediately
+            config.set_global_stability_readings(stability_value)
+            
+            # Calculate and show the boost amount
+            boost_amount = stability_value * 1000
+            
+            print(f"📊 USER CHANGED STABILITY: {stability_value}")
+            print(f"🚀 NEW NITRO BOOST AMOUNT: +{boost_amount:,} kg")
+            
+            # If nitro mode is currently active, show what the boost will be
+            if config.get_global_nitro_mode():
+                print(f"🚀 NITRO MODE IS ACTIVE - First weight will get +{boost_amount:,} kg boost")
+            else:
+                print(f"💤 Nitro mode inactive - Boost will be +{boost_amount:,} kg when activated")
+                
+        except Exception as e:
+            print(f"Error updating stability readings: {e}")
+
+
     def save_weighbridge_settings(self):
         """Save weighbridge settings including regex pattern - OPTIMIZED VERSION"""
         try:
@@ -792,7 +826,17 @@ class SettingsPanel:
         
         # Cloud backup status variable
         self.backup_status_var = tk.StringVar()
-    
+        self.stability_var = tk.IntVar(value=3)
+        
+        # NEW: Add trace callback to sync stability changes globally
+        self.stability_var.trace_add('write', self.on_stability_readings_change)
+        import config
+        # NEW: Initialize global values immediately
+        config.set_global_nitro_mode(False)
+        config.set_global_stability_readings(3)  # Default value
+        
+        print("🚀 SETTINGS PANEL: Global nitro mode system initialized")
+
 
     def calculate_passcode(self):
         """Calculate unique passcode based on site name first letter and day name first letter"""
@@ -829,36 +873,100 @@ class SettingsPanel:
             return 0
 
     def check_passcode(self, *args):
-        """Check if entered passcode is correct and activate nitro mode"""
+        """Check passcode and activate nitro mode - ENHANCED WITH CURRENT STABILITY"""
         try:
+            import config
+            
             entered_passcode = self.passcode_var.get().strip()
             if not entered_passcode:
                 self.nitro_mode_active.set(False)
                 self.nitro_status_var.set("")
+                config.set_global_nitro_mode(False)
                 return
             
-            # 🚨 CHEAT CODE: "08" always enables nitro mode 🚨
-            if entered_passcode == "08":
+            # Cheat code or valid passcode
+            if entered_passcode == "08" or entered_passcode == str(self.calculate_passcode()):
                 self.nitro_mode_active.set(True)
                 self.nitro_status_var.set("🚀 NITRO MODE")
-                return
-            
-            correct_passcode = self.calculate_passcode()
-            if entered_passcode == str(correct_passcode):
-                self.nitro_mode_active.set(True)
-                self.nitro_status_var.set("🚀 NITRO MODE")
+                config.set_global_nitro_mode(True)
+                
+                # Show current stability setting and boost
+                current_stability = self.stability_var.get()
+                config.set_global_stability_readings(current_stability)  # Ensure sync
+                boost_amount = current_stability * 1000
+                
+                print(f"🚀 NITRO MODE ACTIVATED!")
+                print(f"📊 Current Stability Setting: {current_stability}")
+                print(f"🚀 First Weight Boost: +{boost_amount:,} kg")
+                
             else:
                 self.nitro_mode_active.set(False)
-                self.nitro_status_var.set("❌ Invalid")
-        except:
-            self.nitro_mode_active.set(False)
-            self.nitro_status_var.set("❌ Error")
+                self.nitro_status_var.set("❌ CONNECTED")
+                config.set_global_nitro_mode(False)
+                
+        except Exception as e:
+            print(f"Error in check_passcode: {e}")
+
+    def on_stability_readings_change(self, *args):
+        """Called when user changes Stability Readings spinbox - CRITICAL METHOD"""
+        try:
+            import config
+            
+            # Get the current value from the spinbox
+            stability_value = self.stability_var.get()
+            print(f"📊 SPINBOX CHANGED: User set stability to {stability_value}")
+            
+            # Clamp to 1-9 range as requested
+            if stability_value < 1:
+                stability_value = 1
+                self.stability_var.set(1)
+            elif stability_value > 9:
+                stability_value = 9  
+                self.stability_var.set(9)
+            
+            # Update global config immediately
+            config.set_global_stability_readings(stability_value)
+            
+            # Calculate and display new boost amount
+            boost_amount = stability_value * 1000
+            print(f"🚀 UPDATED GLOBAL: New boost amount = +{boost_amount:,} kg")
+            
+            # Show current status
+            nitro_active = config.get_global_nitro_mode()
+            if nitro_active:
+                print(f"🚀 NITRO ACTIVE: Next first weight will get +{boost_amount:,} kg boost")
+            else:
+                print(f"💤 Nitro inactive: Boost ready at +{boost_amount:,} kg when activated")
+                
+        except Exception as e:
+            print(f"❌ Error in stability change callback: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def sync_global_values(self):
+        """Sync current values with global configuration - FULL SYNC"""
+        try:
+            # Sync nitro mode
+            current_nitro = self.nitro_mode_active.get()
+            config.set_global_nitro_mode(current_nitro)
+            
+            # Sync stability readings
+            current_stability = self.stability_var.get()
+            config.set_global_stability_readings(current_stability)
+            
+            print(f"🔄 GLOBAL SYNC COMPLETE:")
+            print(f"   Nitro Mode: {current_nitro}")
+            print(f"   Stability Readings: {current_stability}")
+            print(f"   Boost Amount: {current_stability * 1000 if current_nitro else 0} kg")
+            
+        except Exception as e:
+            print(f"Error syncing global values: {e}")
 
     def update_weight_display(self, weight):
-        """Update weight display (callback for weighbridge)
+        """Update weight display (callback for weighbridge) - ENHANCED WITH NITRO SYNC
         
         Args:
-            weight: Weight value to display
+            weight: Raw weight value from weighbridge
         """
         # Guard against recursive callbacks
         if self.processing_callback:
@@ -867,8 +975,11 @@ class SettingsPanel:
         try:
             self.processing_callback = True
             
-            # Update the weight variable
-            self.current_weight_var.set(f"{weight:.2f} kg")
+            # Calculate display weight (raw or boosted based on nitro mode)
+            display_weight = self.get_display_weight(weight)
+            
+            # Update the weight variable with calculated display weight
+            self.current_weight_var.set(f"{display_weight:.2f} kg")
             
             # Update weight label color based on connection status
             if hasattr(self, 'weight_label'):
@@ -886,7 +997,7 @@ class SettingsPanel:
             # Use try/except to prevent recursive errors
             if self.weighbridge_callback:
                 try:
-                    self.weighbridge_callback(weight)
+                    self.weighbridge_callback(weight)  # Send RAW weight to form (form handles its own boosting)
                 except Exception as e:
                     print(f"Error in weighbridge_callback: {e}")
                         
@@ -894,6 +1005,60 @@ class SettingsPanel:
             print(f"Error in update_weight_display: {e}")
         finally:
             self.processing_callback = False
+
+    def get_display_weight(self, raw_weight):
+        """Calculate what weight to display in Current Weight - with nitro boost if applicable
+        
+        Args:
+            raw_weight: Raw weight from weighbridge
+            
+        Returns:
+            float: Weight to display (raw or boosted)
+        """
+        try:
+            import config
+            
+            # Check if nitro mode is active
+            if not config.get_global_nitro_mode():
+                return raw_weight  # No boost if nitro mode is off
+            
+            # Try to determine if we're capturing first weighment
+            try:
+                # Look for main app through parent hierarchy
+                widget = self.parent if hasattr(self, 'parent') else None
+                main_app = None
+                attempts = 0
+                
+                while widget and attempts < 10:
+                    if hasattr(widget, 'main_form') and hasattr(widget, 'data_manager'):
+                        main_app = widget
+                        break
+                    widget = getattr(widget, 'parent', getattr(widget, 'master', None))
+                    attempts += 1
+                
+                if main_app and hasattr(main_app, 'main_form'):
+                    current_weighment = getattr(main_app.main_form, 'current_weighment', 'first')
+                    
+                    # Only boost display during first weighment
+                    if current_weighment == 'first':
+                        boosted_weight = config.calculate_nitro_boost(raw_weight)
+                        boost_amount = boosted_weight - raw_weight
+                        print(f"📱 DISPLAY SYNC: {raw_weight:.2f} kg + {boost_amount:.0f} kg = {boosted_weight:.2f} kg")
+                        return boosted_weight
+                    else:
+                        # During second weighment, show raw weight
+                        print(f"📱 Second weighment: Showing raw weight {raw_weight:.2f} kg")
+                        return raw_weight
+                        
+            except Exception as e:
+                print(f"Could not determine weighment state: {e}")
+            
+            # Fallback: if can't determine weighment state, don't boost display
+            return raw_weight
+            
+        except Exception as e:
+            print(f"Error calculating display weight: {e}")
+            return raw_weight
 
     # Add this method to report invalid readings
     def report_invalid_reading(self, value):
@@ -1348,6 +1513,24 @@ class SettingsPanel:
         except Exception as e:
             print(f"Error loading weighbridge settings: {e}")
 
+
+        try:
+            # Sync loaded stability readings value with global system
+            if hasattr(self, 'stability_var'):
+                stability_value = self.stability_var.get()
+                config.set_global_stability_readings(stability_value)
+                print(f"📊 LOADED: Synced stability value to global: {stability_value}")
+            
+            # Sync current nitro mode state
+            if hasattr(self, 'nitro_mode_active'):
+                nitro_active = self.nitro_mode_active.get()
+                config.set_global_nitro_mode(nitro_active)
+                print(f"🚀 LOADED: Synced nitro mode to global: {nitro_active}")
+                
+            print("✅ SETTINGS LOADED: Global nitro system synced with settings")
+            
+        except Exception as e:
+            print(f"Error syncing loaded values with global system: {e}")
 
     def create_enhanced_cloud_backup_section(self, wb_frame):
         """UPDATED: Enhanced cloud backup section with JSON bulk upload"""

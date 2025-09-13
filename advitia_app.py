@@ -840,6 +840,9 @@ class TharuniApp:
             # Load sites and agencies for dropdowns in the main form
             self.main_form.load_sites_and_agencies(self.settings_storage)
 
+            if hasattr(self, 'settings_panel'):
+                self.settings_panel.main_form_ref = self.main_form
+
             # Set the site name based on login selection if available
             if self.selected_site:
                 self.main_form.set_site(self.selected_site)

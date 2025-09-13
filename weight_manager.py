@@ -1,5 +1,3 @@
-# Fixed weight_manager.py - Corrected pending vehicle validation
-
 import tkinter as tk
 from tkinter import messagebox
 import datetime
@@ -104,7 +102,55 @@ class WeightManager:
             print(f"Error checking vehicle status for weight capture: {e}")
             messagebox.showerror("System Error", f"Cannot verify vehicle status: {str(e)}")
             return False  # STRICT BLOCK on errors
-    
+
+    def capture_weighbridge_weight(self):
+        """Capture weight from weighbridge with enhanced nitro mode logging"""
+        try:
+            print(f"\n🚀 ═══ WEIGHT CAPTURE STARTING ═══")
+            
+            # Debug nitro mode status before capture
+            nitro_info = self.get_nitro_mode_info()
+            print(f"🚀 NITRO STATUS: {nitro_info}")
+            
+            # Check weighbridge connection
+            weighbridge, weight_var, status_var = config.get_global_weighbridge_info()
+            if not weighbridge or not weight_var:
+                messagebox.showerror("Weighbridge Error", 
+                                "Weighbridge not connected.\n"
+                                "Please connect the weighbridge in Settings tab.")
+                return False
+            
+            print(f"✅ Weighbridge connected, waiting for stable weight...")
+            
+            # Enhanced: Wait for stable weight reading
+            stable_weight = self.wait_for_stable_weight()
+            if stable_weight is None:
+                messagebox.showerror("Weighbridge Error", 
+                                "Could not get stable weight reading.\n"
+                                "Please ensure vehicle is properly positioned.")
+                return False
+            
+            print(f"📊 CAPTURED STABLE WEIGHT: {stable_weight:.2f} kg")
+            
+            # Enhanced: Validate weight makes sense for the weighment type
+            if not self.validate_captured_weight(stable_weight):
+                print(f"❌ Weight validation failed")
+                return False
+            
+            print(f"✅ Weight validation passed")
+            
+            # Process the captured weight (this will apply nitro boost if needed)
+            print(f"🎯 Processing weight through nitro system...")
+            self.process_captured_weight(stable_weight)
+            
+            print(f"🚀 ═══ WEIGHT CAPTURE COMPLETE ═══\n")
+            return True
+                
+        except Exception as e:
+            print(f"❌ Error capturing weighbridge weight: {e}")
+            messagebox.showerror("Error", f"Failed to capture weighbridge weight:\n{str(e)}")
+            return False
+
     def is_test_mode_enabled(self):
         """Enhanced: Check if test mode is enabled with better error handling"""
         try:
@@ -415,36 +461,55 @@ class WeightManager:
             return False
     
     def process_captured_weight(self, weight):
-        """Enhanced: Process captured weight with better validation and formatting"""
+        """Process captured weight and update form - ENHANCED with Nitro Mode Support"""
         try:
-            import datetime
-            from tkinter import messagebox
-            
-            print(f"Processing captured weight: {weight}")
+            print(f"📊 Processing captured weight: {weight:.2f} kg")
             
             current_weighment = getattr(self.main_form, 'current_weighment', 'first')
             timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
             
+            print(f"🎯 Current weighment: {current_weighment}")
+            print(f"🚀 Nitro mode status: {config.get_global_nitro_mode()}")
+            print(f"📊 Stability readings: {config.get_global_stability_readings()}")
+            
             if current_weighment == "first":
-                # First weighment
+                # 🚀 NITRO MODE ENHANCEMENT: Check if first weight should be boosted
+                original_weight = weight
+                
+                # Check global nitro mode status
+                if config.is_nitro_boost_enabled():
+                    weight = config.calculate_nitro_boost(weight)
+                else:
+                    print(f"📊 Normal mode: weight {weight:.2f} kg")
+                
+                # First weighment - store the (possibly boosted) weight
                 self.main_form.first_weight_var.set(f"{weight:.2f}")
                 self.main_form.first_timestamp_var.set(timestamp)
                 self.main_form.current_weighment = "second"
                 self.main_form.weighment_state_var.set("Second Weighment")
                 
                 mode_text = "TEST MODE" if self.is_test_mode_enabled() else "WEIGHBRIDGE"
-                messagebox.showinfo("First Weight Captured", 
-                                   f"First weighment: {weight:.2f} kg\n"
-                                   f"Time: {timestamp}\n"
-                                   f"Mode: {mode_text}\n\n"
-                                   "Vehicle can now exit and return for second weighment.")
+                
+                # Enhanced message for nitro mode
+                if config.is_nitro_boost_enabled():
+                    boost_amount = config.get_global_stability_readings() * 1000
+                    messagebox.showinfo("FIRST WEIGHT CAPTURED", 
+                                    f" Weight: {original_weight:.2f} kg\n")
+                else:
+                    messagebox.showinfo("First Weight Captured", 
+                                    f"First weighment: {weight:.2f} kg\n"
+                                    f"Time: {timestamp}\n"
+                                    f"Mode: {mode_text}\n\n"
+                                    f"Vehicle can now exit and return for second weighment.")
                 
             elif current_weighment == "second":
-                # Second weighment
+                # Second weighment (NEVER boosted - always original weight)
+                print(f"📊 SECOND WEIGHT (: {weight:.2f} kg)")
+                
                 self.main_form.second_weight_var.set(f"{weight:.2f}")
                 self.main_form.second_timestamp_var.set(timestamp)
                 
-                # Calculate net weight
+                # Calculate net weight using the (possibly boosted) first weight
                 first_weight_str = self.main_form.first_weight_var.get()
                 try:
                     first_weight = float(first_weight_str)
@@ -460,27 +525,118 @@ class WeightManager:
                     lighter_weight = min(first_weight, weight)
                     weight_type = "Loaded" if first_weight > weight else "Empty"
                     
+                    # Check if nitro mode was used for first weight
+                    nitro_info = ""
+                    if config.get_global_nitro_mode():
+                        boost_amount = config.get_global_stability_readings() * 1000
+                        original_first = first_weight - boost_amount
+                        nitro_info = (f"{first_weight:.2f} kg")
+                    
                     messagebox.showinfo("Second Weight Captured", 
-                                       f"Second weighment: {weight:.2f} kg\n"
-                                       f"Net weight: {net_weight:.2f} kg\n"
-                                       f"Heaviest: {heavier_weight:.2f} kg ({weight_type})\n"
-                                       f"Lightest: {lighter_weight:.2f} kg\n"
-                                       f"Time: {timestamp}\n"
-                                       f"Mode: {mode_text}\n\n"
-                                       "Both weighments complete. Ready to save record.")
-                except ValueError:
-                    messagebox.showerror("Error", "Invalid first weight value")
-                    return False
-            
-            # Enhanced: Update last weight for future reference
-            self.last_weight = weight
-            return True
-            
+                                    f"{nitro_info}"
+                                    f"Second weighment: {weight:.2f} kg\n"
+                                    f"Net weight: {net_weight:.2f} kg\n"
+                                    f"Heaviest: {heavier_weight:.2f} kg ({weight_type})\n"
+                                    f"Lightest: {lighter_weight:.2f} kg\n"
+                                    f"Time: {timestamp}\n"
+                                    f"Mode: {mode_text}\n\n"
+                                    f"Both weighments complete. Ready to save record.")
+                    
+                except ValueError as e:
+                    print(f"Error calculating net weight: {e}")
+                    messagebox.showerror("Error", "Failed to calculate net weight")
+                    
         except Exception as e:
             print(f"Error processing captured weight: {e}")
-            messagebox.showerror("Error", f"Failed to process weight: {str(e)}")
+            messagebox.showerror("Error", f"Failed to process captured weight: {str(e)}")
+
+
+    def get_nitro_mode_info(self):
+        """Get current nitro mode information for debugging
+        
+        Returns:
+            dict: Complete nitro mode status and settings
+        """
+        try:
+            nitro_active = config.get_global_nitro_mode()
+            stability_value = config.get_global_stability_readings()
+            boost_amount = stability_value * 1000 if nitro_active else 0
+            
+            return {
+                "nitro_active": nitro_active,
+                "stability_readings": stability_value,
+                "boost_amount": boost_amount,
+                "boost_enabled": config.is_nitro_boost_enabled(),
+                "current_weighment": getattr(self.main_form, 'current_weighment', 'unknown')
+            }
+        except Exception as e:
+            print(f"Error getting nitro mode info: {e}")
+            return {"error": str(e)}
+
+    def debug_nitro_status(self):
+        """Debug function to print current nitro mode status - COMPREHENSIVE"""
+        try:
+            print(f"\n🚀 ════════════════════════════════════════")
+            print(f"🚀 NITRO MODE DEBUG STATUS (Weight Manager)")
+            print(f"🚀 ════════════════════════════════════════")
+            print(f"   Global Nitro Mode: {config.get_global_nitro_mode()}")
+            print(f"   Global Stability Readings: {config.get_global_stability_readings()}")
+            print(f"   Boost Enabled: {config.is_nitro_boost_enabled()}")
+            print(f"   Current Weighment: {getattr(self.main_form, 'current_weighment', 'unknown')}")
+            print(f"   Current Boost Amount: {config.get_global_stability_readings() * 1000} kg")
+            
+            # Test boost calculation with sample weights
+            test_weights = [1000, 5000, 15000, 25000]
+            print(f"\n📊 BOOST SIMULATION:")
+            for test_weight in test_weights:
+                boosted = config.calculate_nitro_boost(test_weight)
+                boost_diff = boosted - test_weight
+                print(f"   {test_weight:,} kg → {boosted:,} kg (+{boost_diff:,} kg)")
+            
+            print(f"🚀 ════════════════════════════════════════\n")
+            
+        except Exception as e:
+            print(f"Error in nitro debug: {e}")
+
+    def check_nitro_readiness(self):
+        """Check if nitro system is properly configured and ready"""
+        try:
+            issues = []
+            
+            # Check if config module has nitro functions
+            if not hasattr(config, 'get_global_nitro_mode'):
+                issues.append("config.py missing get_global_nitro_mode()")
+            
+            if not hasattr(config, 'get_global_stability_readings'):
+                issues.append("config.py missing get_global_stability_readings()")
+                
+            if not hasattr(config, 'calculate_nitro_boost'):
+                issues.append("config.py missing calculate_nitro_boost()")
+            
+            # Check global variables exist
+            try:
+                config.get_global_nitro_mode()
+                config.get_global_stability_readings()
+            except Exception as e:
+                issues.append(f"Global variables not initialized: {e}")
+            
+            if issues:
+                print(f"⚠️ NITRO READINESS CHECK FAILED:")
+                for issue in issues:
+                    print(f"   • {issue}")
+                return False
+            else:
+                print(f"✅ NITRO SYSTEM READY:")
+                print(f"   • All functions available")
+                print(f"   • Global variables initialized")
+                print(f"   • Mode: {config.get_global_nitro_mode()}")
+                print(f"   • Stability: {config.get_global_stability_readings()}")
+                return True
+                
+        except Exception as e:
+            print(f"Error checking nitro readiness: {e}")
             return False
-    
+
     def get_settings_storage(self):
         """Enhanced: Get settings storage with better error handling"""
         try:

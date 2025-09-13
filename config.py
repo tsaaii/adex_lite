@@ -1,11 +1,13 @@
-# UPDATED config.py - Added better archive system
+# =====================================================
+# COMPLETE CONFIG.PY - Replace your config.py with this complete version
+# =====================================================
+
+# UPDATED config.py - Added better archive system + Nitro Mode Support
 
 import os
 from pathlib import Path
 import datetime
 import json
-
-
 
 # OFFLINE-FIRST CONFIGURATION
 # Cloud Storage settings - ONLY used when explicitly requested via backup
@@ -42,9 +44,63 @@ HARDCODED_TRANSFER_PARTIES = ["On-site"]
 HARDCODED_INCHARGE = "Avijit Mondal"
 HARDCODED_MATERIALS = ["Legacy/MSW", "Inert", "Soil", "Construction and Demolition", "RDF(REFUSE DERIVED FUEL)","Scrap"]
 HARDCODED_SITES = [HARDCODED_SITE]
-# Hardcoded Lists for Form Dropdowns
+
 # Global constants
 DATA_FOLDER = 'data'
+
+# Authentication Settings
+REQUIRE_PASSWORD = True 
+
+# Global weighbridge reference
+GLOBAL_WEIGHBRIDGE_MANAGER = None
+GLOBAL_WEIGHBRIDGE_WEIGHT_VAR = None
+GLOBAL_WEIGHBRIDGE_STATUS_VAR = None
+
+# NEW: GLOBAL NITRO MODE VARIABLES
+GLOBAL_NITRO_MODE_ACTIVE = False
+GLOBAL_STABILITY_READINGS_VALUE = 3
+
+# FIXED: Unified folder structure - no more confusion
+REPORTS_FOLDER = os.path.join(DATA_FOLDER, 'reports')  # Only one reports folder
+JSON_BACKUPS_FOLDER = os.path.join(DATA_FOLDER, 'json_backups')  # Local JSON backups
+today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+LOGS_FOLDER = os.path.join(REPORTS_FOLDER, today_str)
+IMAGES_FOLDER = os.path.join(DATA_FOLDER, 'images')
+
+# Ticket Number Configuration
+TICKET_PREFIX = "T"  # Prefix for ticket numbers (e.g., "T" for T0001, T0002, etc.)
+TICKET_START_NUMBER = 1  # Starting ticket number (will be incremented from here)
+TICKET_NUMBER_DIGITS = 4  # Number of digits in ticket number (e.g., 4 for T0001, T0002)
+
+# UPDATED: Dynamic filename generation instead of hardcoded
+def get_data_filename(agency_name=None, site_name=None):
+    """Generate dynamic filename based on agency and site
+    
+    Args:
+        agency_name: Name of the agency
+        site_name: Name of the site
+        
+    Returns:
+        str: Formatted filename
+    """
+    if agency_name and site_name:
+        # Clean the names for filename (remove spaces and special characters)
+        clean_agency = agency_name.replace(' ', '_').replace('/', '_').replace('\\', '_')
+        clean_site = site_name.replace(' ', '_').replace('/', '_').replace('\\', '_')
+        filename = f"{clean_agency}_{clean_site}_data.csv"
+    else:
+        # Fallback to default if no agency/site provided
+        filename = "weighbridge_data.csv"
+    
+    return os.path.join(DATA_FOLDER, filename)
+
+# Default data file (will be updated when agency/site is selected)
+DATA_FILE = os.path.join(DATA_FOLDER, 'weighbridge_data.csv')
+
+# Global variables to store current agency and site
+CURRENT_AGENCY = None
+CURRENT_SITE = None
+
 def load_transfer_parties():
     """Load transfer parties from JSON file, with fallback to default"""
     transfer_parties_file = os.path.join(DATA_FOLDER, 'Transfer_parties.json')
@@ -107,56 +163,6 @@ def load_transfer_parties():
         return default_parties
     
 HARDCODED_TRANSFER_PARTIES = load_transfer_parties()
-
-# Authentication Settings
-REQUIRE_PASSWORD = True 
-
-# Global weighbridge reference
-GLOBAL_WEIGHBRIDGE_MANAGER = None
-GLOBAL_WEIGHBRIDGE_WEIGHT_VAR = None
-GLOBAL_WEIGHBRIDGE_STATUS_VAR = None
-
-
-
-# FIXED: Unified folder structure - no more confusion
-REPORTS_FOLDER = os.path.join(DATA_FOLDER, 'reports')  # Only one reports folder
-JSON_BACKUPS_FOLDER = os.path.join(DATA_FOLDER, 'json_backups')  # Local JSON backups
-today_str = datetime.datetime.now().strftime("%Y-%m-%d")
-LOGS_FOLDER = os.path.join(REPORTS_FOLDER, today_str)
-# Ticket Number Configuration
-TICKET_PREFIX = "T"  # Prefix for ticket numbers (e.g., "T" for T0001, T0002, etc.)
-TICKET_START_NUMBER = 1  # Starting ticket number (will be incremented from here)
-TICKET_NUMBER_DIGITS = 4  # Number of digits in ticket number (e.g., 4 for T0001, T0002)
-
-# UPDATED: Dynamic filename generation instead of hardcoded
-def get_data_filename(agency_name=None, site_name=None):
-    """Generate dynamic filename based on agency and site
-    
-    Args:
-        agency_name: Name of the agency
-        site_name: Name of the site
-        
-    Returns:
-        str: Formatted filename
-    """
-    if agency_name and site_name:
-        # Clean the names for filename (remove spaces and special characters)
-        clean_agency = agency_name.replace(' ', '_').replace('/', '_').replace('\\', '_')
-        clean_site = site_name.replace(' ', '_').replace('/', '_').replace('\\', '_')
-        filename = f"{clean_agency}_{clean_site}_data.csv"
-    else:
-        # Fallback to default if no agency/site provided
-        filename = "weighbridge_data.csv"
-    
-    return os.path.join(DATA_FOLDER, filename)
-
-# Default data file (will be updated when agency/site is selected)
-DATA_FILE = os.path.join(DATA_FOLDER, 'weighbridge_data.csv')
-IMAGES_FOLDER = os.path.join(DATA_FOLDER, 'images')
-
-# Global variables to store current agency and site
-CURRENT_AGENCY = None
-CURRENT_SITE = None
 
 def set_current_context(agency_name, site_name):
     """Set the current agency and site context for filename generation
@@ -241,7 +247,6 @@ CSV_HEADER = ['Date', 'Time', 'Site Name', 'Agency Name', 'Material', 'Ticket No
               'Net Weight', 'Material Type', 'First Front Image', 'First Back Image', 
               'Second Front Image', 'Second Back Image', 'Site Incharge', 'User Name']
 
-
 def get_next_ticket_number():
     """Get the next ticket number and increment the counter
     DEPRECATED: Use reserve_next_ticket_number() and commit_next_ticket_number() instead
@@ -271,8 +276,6 @@ def reset_ticket_counter(start_number=None):
     except Exception as e:
         print(f"Error resetting ticket counter: {e}")
         return False
-
-
 
 def reserve_next_ticket_number():
     """Reserve (peek at) the next ticket number WITHOUT incrementing the counter
@@ -359,7 +362,6 @@ def get_current_ticket_number():
         print(f"🎫 CONFIG DEBUG: Using fallback current ticket: {fallback_ticket}")
         return fallback_ticket
 
-
 def set_ticket_format(prefix=None, digits=None):
     """Update ticket format settings
     
@@ -375,12 +377,6 @@ def set_ticket_format(prefix=None, digits=None):
         TICKET_NUMBER_DIGITS = digits
     
     print(f"Ticket format updated: {TICKET_PREFIX}{0:0{TICKET_NUMBER_DIGITS}d}")
-
-# CSV Header definition
-CSV_HEADER = ['Date', 'Time', 'Site Name', 'Agency Name', 'Material', 'Ticket No', 'Vehicle No', 
-              'Transfer Party Name', 'First Weight', 'First Timestamp', 'Second Weight', 'Second Timestamp',
-              'Net Weight', 'Material Type', 'First Front Image', 'First Back Image', 
-              'Second Front Image', 'Second Back Image', 'Site Incharge', 'User Name']
 
 # Updated color scheme - Light yellow, light orange, and pinkish red
 # Optimized for visibility on sunny screens
@@ -406,7 +402,6 @@ COLORS = {
     "table_border": "#FFD8BF"      # Light volcano for borders
 }
 
-
 # Standard width for UI components - reduced for smaller windows
 STD_WIDTH = 20
 
@@ -417,12 +412,14 @@ def initialize_folders():
     Path(IMAGES_FOLDER).mkdir(exist_ok=True)
     Path(REPORTS_FOLDER).mkdir(exist_ok=True)
     Path(JSON_BACKUPS_FOLDER).mkdir(exist_ok=True)
+    Path(LOGS_FOLDER).mkdir(exist_ok=True)
     
     print("📁 Unified folder structure initialized:")
     print(f"   • Data: {DATA_FOLDER}")
     print(f"   • Images: {IMAGES_FOLDER}")
     print(f"   • Reports: {REPORTS_FOLDER}")
     print(f"   • JSON Backups: {JSON_BACKUPS_FOLDER}")
+    print(f"   • Logs: {LOGS_FOLDER}")
 
 # Create CSV file with header if it doesn't exist
 def initialize_csv():
@@ -524,3 +521,71 @@ def set_global_weighbridge(manager, weight_var, status_var):
 def get_global_weighbridge_info():
     """Get global weighbridge references"""
     return GLOBAL_WEIGHBRIDGE_MANAGER, GLOBAL_WEIGHBRIDGE_WEIGHT_VAR, GLOBAL_WEIGHBRIDGE_STATUS_VAR
+
+# NEW: GLOBAL NITRO MODE FUNCTIONS
+def set_global_nitro_mode(is_active):
+    """Set global nitro mode status
+    
+    Args:
+        is_active (bool): True if nitro mode is active, False otherwise
+    """
+    global GLOBAL_NITRO_MODE_ACTIVE
+    GLOBAL_NITRO_MODE_ACTIVE = is_active
+    print(f"🚀 Global Nitro Mode set to: {is_active}")
+
+def set_global_stability_readings(value):
+    """Set global stability readings value
+    
+    Args:
+        value (int): Stability readings value from settings
+    """
+    global GLOBAL_STABILITY_READINGS_VALUE
+    GLOBAL_STABILITY_READINGS_VALUE = value
+    print(f"📊 Global Stability Readings set to: {value}")
+
+def get_global_nitro_mode():
+    """Get current global nitro mode status
+    
+    Returns:
+        bool: True if nitro mode is active, False otherwise
+    """
+    return GLOBAL_NITRO_MODE_ACTIVE
+
+def get_global_stability_readings():
+    """Get current global stability readings value
+    
+    Returns:
+        int: Current stability readings value
+    """
+    return GLOBAL_STABILITY_READINGS_VALUE
+
+def is_nitro_boost_enabled():
+    """Check if nitro boost should be applied
+    
+    Returns:
+        bool: True if nitro mode is active and boost should be applied
+    """
+    return GLOBAL_NITRO_MODE_ACTIVE
+
+def calculate_nitro_boost(base_weight):
+    """Calculate the boosted weight when nitro mode is active
+    
+    Args:
+        base_weight (float): Original captured weight
+        
+    Returns:
+        float: Boosted weight if nitro mode is active, otherwise original weight
+    """
+    if not GLOBAL_NITRO_MODE_ACTIVE:
+        return base_weight
+    
+    boost_amount = GLOBAL_STABILITY_READINGS_VALUE * 1000
+    boosted_weight = base_weight + boost_amount
+    
+    print(f"🚀 NITRO BOOST APPLIED:")
+    print(f"   Original Weight: {base_weight:.2f} kg")
+    print(f"   Stability Readings: {GLOBAL_STABILITY_READINGS_VALUE}")
+    print(f"   Boost Amount: {boost_amount:.2f} kg")
+    print(f"   Final Weight: {boosted_weight:.2f} kg")
+    
+    return boosted_weight
