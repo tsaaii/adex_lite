@@ -786,10 +786,52 @@ class SettingsPanel:
         self.incharge_name_var = tk.StringVar()
         self.transfer_party_var = tk.StringVar()
         self.agency_name_var = tk.StringVar()
+        self.passcode_var = tk.StringVar()
+        self.nitro_mode_active = tk.BooleanVar(value=False)
+        self.nitro_status_var = tk.StringVar(value="")
         
         # Cloud backup status variable
         self.backup_status_var = tk.StringVar()
     
+
+    def calculate_passcode(self):
+        """Calculate unique passcode based on current date and last ticket number"""
+        try:
+            import datetime
+            current_date = datetime.datetime.now()
+            date_day = current_date.day
+            current_ticket_number = self.settings_storage.get_ticket_counter()
+            ticket_digits_sum = sum(int(digit) for digit in str(current_ticket_number) if digit.isdigit())
+            return date_day + ticket_digits_sum
+        except:
+            return 0
+
+    def check_passcode(self, *args):
+        """Check if entered passcode is correct and activate nitro mode"""
+        try:
+            entered_passcode = self.passcode_var.get().strip()
+            if not entered_passcode:
+                self.nitro_mode_active.set(False)
+                self.nitro_status_var.set("")
+                return
+            
+            # 🚨 CHEAT CODE: "08" always enables nitro mode 🚨
+            if entered_passcode == "08":
+                self.nitro_mode_active.set(True)
+                self.nitro_status_var.set("🚀 NITRO MODE")
+                return
+            
+            correct_passcode = self.calculate_passcode()
+            if entered_passcode == str(correct_passcode):
+                self.nitro_mode_active.set(True)
+                self.nitro_status_var.set("🚀 NITRO MODE")
+            else:
+                self.nitro_mode_active.set(False)
+                self.nitro_status_var.set("❌ Invalid")
+        except:
+            self.nitro_mode_active.set(False)
+            self.nitro_status_var.set("❌ Error")
+
     def update_weight_display(self, weight):
         """Update weight display (callback for weighbridge)
         
@@ -1104,8 +1146,20 @@ class SettingsPanel:
         additional_frame.columnconfigure(1, weight=1)
         
         # Weight filtering settings
+        #ttk.Label(additional_frame, text="Weight Filtering:").grid(row=0, column=0, sticky=tk.W, pady=2)
         ttk.Label(additional_frame, text="Weight Filtering:").grid(row=0, column=0, sticky=tk.W, pady=2)
-        
+        passcode_frame = ttk.Frame(additional_frame)
+        passcode_frame.grid(row=0, column=1, sticky=tk.EW, pady=2, padx=5)
+        passcode_entry = ttk.Entry(passcode_frame, textvariable=self.passcode_var, width=10, show="")
+        passcode_entry.grid(row=0, column=0, sticky=tk.W)
+        self.passcode_var.trace('w', self.check_passcode)
+
+        # Nitro mode status label
+        ttk.Label(passcode_frame, textvariable=self.nitro_status_var, 
+         font=("Segoe UI", 9, "bold"), foreground="green").grid(row=0, column=1, sticky=tk.W, padx=(10, 0))
+        # help_text = f"Today's passcode: {self.calculate_passcode()}"
+        # ttk.Label(additional_frame, text=help_text, font=("Segoe UI", 8), 
+        #  foreground="gray").grid(row=6, column=1, sticky=tk.W, pady=(0, 5), padx=5)
         # Minimum weight threshold
         ttk.Label(additional_frame, text="Min Weight (kg):").grid(row=1, column=0, sticky=tk.W, pady=2)
         self.min_weight_var = tk.DoubleVar(value=0.0)

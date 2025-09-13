@@ -1373,7 +1373,12 @@ class TharuniApp:
                 self.main_form.on_closing()
             
             if hasattr(self, 'settings_panel'):
+                self.settings_panel.nitro_mode_active.set(False)
+                self.settings_panel.nitro_status_var.set("")
+                self.settings_panel.passcode_var.set("")
                 self.settings_panel.on_closing()
+
+
             
             # Reset user info
             self.logged_in_user = None
