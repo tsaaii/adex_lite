@@ -2,7 +2,7 @@
 # pyinstaller ^
 #   --onedir ^
 #   --windowed ^
-#   --name="SAC_monitor_Nandyal_V2" ^
+#   --name="SAC_monitor_Test" ^
 #   --icon=right.ico ^
 #   --add-data "data;data" ^
 #   --add-data "assets/logo.png;assets" ^

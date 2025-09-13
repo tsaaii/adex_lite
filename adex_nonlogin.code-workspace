@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../adex_nonlogin"
+		},
+		{
+			"path": "../adex_hd/adex"
+		},
+		{
+			"path": "."
+		}
+	],
+	"settings": {}
+}
