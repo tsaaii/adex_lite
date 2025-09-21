@@ -19,7 +19,7 @@ except ImportError:
 import config
 
 class WeighbridgeManager:
-    """Optimized weighbridge manager with regex processing moved out of main serial loop"""
+    """Optimized weighbridge manager with FIXED serial reading for devices without line terminators"""
     
     def __init__(self, weight_callback=None):
         """Initialize weighbridge manager - loads regex patterns from settings"""
@@ -344,8 +344,7 @@ class WeighbridgeManager:
             pass
     
     def _optimized_read_loop(self):
-        """OPTIMIZED reading loop - uses cached compiled regex for maximum speed"""
-        raw_data_buffer = []  # Buffer for collecting data
+        """FIXED: Reading loop using the proven working method (read available bytes)"""
         
         while self.should_read:
             try:
@@ -357,18 +356,23 @@ class WeighbridgeManager:
                 if self.serial_connection and self.serial_connection.is_open:
                     if self.serial_connection.in_waiting > 0:
                         try:
-                            # FAST read
-                            line = self.serial_connection.readline().decode('utf-8', errors='ignore').strip()
+                            # FIXED: Use ONLY the proven working method
+                            # Don't mix readline() and read(ser.in_waiting) - causes data loss
+                            raw_data = self.serial_connection.read(self.serial_connection.in_waiting)
                             
-                            if line:
-                                # CRITICAL OPTIMIZATION: Use pre-compiled cached pattern
-                                # No regex compilation in main loop!
-                                weight = self._parse_weight(line)
+                            if raw_data:
+                                # Decode exactly like the working script
+                                decoded_data = raw_data.decode('utf-8', errors='ignore')
                                 
-                                if weight is not None:
-                                    self._process_weight(weight)
-                                    self.consecutive_errors = 0
-                                    self.last_successful_read = datetime.datetime.now()
+                                if decoded_data:
+                                    # CRITICAL OPTIMIZATION: Use pre-compiled cached pattern
+                                    # No regex compilation in main loop!
+                                    weight = self._parse_weight(decoded_data)
+                                    
+                                    if weight is not None:
+                                        self._process_weight(weight)
+                                        self.consecutive_errors = 0
+                                        self.last_successful_read = datetime.datetime.now()
                         
                         except serial.SerialException:
                             self.consecutive_errors += 1
