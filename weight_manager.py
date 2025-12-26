@@ -108,6 +108,29 @@ class WeightManager:
         try:
             print(f"\n🚀 ═══ WEIGHT CAPTURE STARTING ═══")
             
+            if hasattr(self.main_form, 'video_recorder'):
+                video_recorder = self.main_form.video_recorder
+                
+                if video_recorder.is_enabled():
+                    # Get current vehicle and site info
+                    vehicle_no = self.main_form.vehicle_var.get()
+                    site_name = self.main_form.site_var.get()
+                    
+                    # Determine weighment type based on existing first weight
+                    weighment_type = "first"
+                    if hasattr(self.main_form, 'first_weight_var'):
+                        first_weight = self.main_form.first_weight_var.get()
+                        if first_weight and first_weight.strip() and first_weight != "0":
+                            weighment_type = "second"
+                    
+                    # Start video recording
+                    video_recorder.start_recording(
+                        vehicle_number=vehicle_no,
+                        site_name=site_name,
+                        weighment_type=weighment_type
+                    )
+                    print(f"🎬 Video recording started for {weighment_type} weight capture")            
+            
             # Debug nitro mode status before capture
             nitro_info = self.get_nitro_mode_info()
             print(f"🚀 NITRO STATUS: {nitro_info}")

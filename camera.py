@@ -25,6 +25,8 @@ class RobustCameraView:
         self.rtsp_url = None
         self.http_url = None
         self.auto_start = auto_start
+        self.video_recorder = None
+        self.camera_id = "front"
         
         # Quality enhancement: Maximum quality settings (internal only)
         self.jpeg_quality = 95  # High quality for saved images
@@ -252,7 +254,12 @@ class RobustCameraView:
                     with self.frame_lock:
                         self.current_frame = frame.copy()  # Keep original for saving
                         self.display_frame = processed_frame.copy()  # Processed for display
-                    
+
+                    if self.video_recorder and self.video_recorder.is_recording:
+                        try:
+                            self.video_recorder.add_frame(frame, self.camera_id)
+                        except Exception as e:
+                            pass                    
                     # Update timing and stats
                     self.last_frame_time = current_time
                     self.frame_count += 1

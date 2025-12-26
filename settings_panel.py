@@ -52,6 +52,148 @@ class SettingsPanel:
         self.load_all_saved_settings()
 
 
+
+    def create_video_recording_settings(self, parent):
+        """Create video recording settings section with toggle switch
+        
+        Add this below weighbridge settings in your settings panel.
+        Call this method after create_weighbridge_settings()
+        """
+        
+        # Video Recording Settings Frame - Add BELOW weighbridge settings
+        video_frame = ttk.LabelFrame(parent, text="Video Clip Recording")
+        video_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        # Main container with padding
+        video_container = ttk.Frame(video_frame)
+        video_container.pack(fill=tk.X, padx=10, pady=10)
+        
+        # Description label explaining the feature
+        desc_text = (
+            "When enabled, video clips will be automatically recorded from both cameras\n"
+            "starting when you click 'Capture Weight' until you click 'Save Image'.\n"
+            "Clips are saved in: captured_images/[date]/clips/[vehicle_number]/"
+        )
+        desc_label = ttk.Label(
+            video_container,
+            text=desc_text,
+            font=("Segoe UI", 9),
+            foreground="gray",
+            justify=tk.LEFT
+        )
+        desc_label.pack(anchor=tk.W, pady=(0, 10))
+        
+        # Toggle switch frame
+        toggle_frame = ttk.Frame(video_container)
+        toggle_frame.pack(fill=tk.X, pady=5)
+        
+        # Label for toggle
+        toggle_label = ttk.Label(
+            toggle_frame, 
+            text="Enable Video Clip Recording:",
+            font=("Segoe UI", 10)
+        )
+        toggle_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Create toggle switch (Checkbutton)
+        self.video_toggle = ttk.Checkbutton(
+            toggle_frame,
+            variable=self.video_recording_var,
+            text="",
+            command=self.on_video_toggle_changed
+        )
+        self.video_toggle.pack(side=tk.LEFT, padx=5)
+        
+        # Status label showing current state
+        self.video_status_var = tk.StringVar(value="Disabled")
+        self.video_status_label = ttk.Label(
+            toggle_frame,
+            textvariable=self.video_status_var,
+            font=("Segoe UI", 10, "bold"),
+            foreground="red"
+        )
+        self.video_status_label.pack(side=tk.LEFT, padx=10)
+        
+        # Disk space warning note
+        note_frame = ttk.Frame(video_container)
+        note_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        note_label = ttk.Label(
+            note_frame,
+            text="⚠️ Note: Video recording uses additional disk space. "
+                 "Each clip is typically 2-10 MB depending on duration.",
+            font=("Segoe UI", 8),
+            foreground="orange",
+            wraplength=400
+        )
+        note_label.pack(anchor=tk.W)
+        
+        # Load saved settings
+        self.load_video_recording_settings()
+
+    def on_video_toggle_changed(self):
+        """Handle video recording toggle change"""
+        enabled = self.video_recording_var.get()
+        
+        # Update status display
+        if enabled:
+            self.video_status_var.set("Enabled ✅")
+            self.video_status_label.config(foreground="green")
+            print("📹 Video clip recording ENABLED")
+        else:
+            self.video_status_var.set("Disabled")
+            self.video_status_label.config(foreground="red")
+            print("📹 Video clip recording DISABLED")
+        
+        # Save the setting to persistent storage
+        self.save_video_recording_settings()
+        
+        # Apply to video recorder immediately if callback is set
+        if self.update_video_recorder_callback:
+            self.update_video_recorder_callback(enabled)
+
+    def save_video_recording_settings(self):
+        """Save video recording settings to persistent storage"""
+        try:
+            settings = {
+                "enabled": self.video_recording_var.get(),
+                "fps": 15,
+                "max_duration": 120
+            }
+            
+            success = self.settings_storage.save_video_recording_settings(settings)
+            if success:
+                print("✅ Video recording settings saved successfully")
+                return True
+            else:
+                print("❌ Failed to save video recording settings")
+                return False
+                
+        except Exception as e:
+            print(f"Error saving video recording settings: {e}")
+            return False
+
+    def load_video_recording_settings(self):
+        """Load video recording settings from persistent storage"""
+        try:
+            settings = self.settings_storage.get_video_recording_settings()
+            if settings:
+                enabled = settings.get("enabled", False)
+                self.video_recording_var.set(enabled)
+                
+                # Update status display
+                if enabled:
+                    self.video_status_var.set("Enabled ✅")
+                    self.video_status_label.config(foreground="green")
+                else:
+                    self.video_status_var.set("Disabled")
+                    self.video_status_label.config(foreground="red")
+                
+                print(f"Loaded video recording settings: enabled={enabled}")
+                
+        except Exception as e:
+            print(f"Error loading video recording settings: {e}")
+
     def create_panel(self):
         """Create settings panel with tabs"""
         # Create settings notebook
@@ -82,6 +224,7 @@ class SettingsPanel:
         
         # Create tab contents for core tabs (always present)
         self.create_weighbridge_settings(weighbridge_tab)
+        self.create_video_recording_settings(weighbridge_tab)
         self.create_camera_settings(camera_tab)
 
         # Admin controls (lock/unlock) - only show if admin and not hardcoded mode
@@ -827,6 +970,9 @@ class SettingsPanel:
         # Cloud backup status variable
         self.backup_status_var = tk.StringVar()
         self.stability_var = tk.IntVar(value=3)
+
+        self.video_recording_var = tk.BooleanVar(value=False)
+        self.update_video_recorder_callback = None
         
         # NEW: Add trace callback to sync stability changes globally
         self.stability_var.trace_add('write', self.on_stability_readings_change)

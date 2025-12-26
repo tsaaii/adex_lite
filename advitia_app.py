@@ -795,7 +795,8 @@ class TharuniApp:
             
             # Also store reference in parent widget for widget hierarchy search
             settings_tab.data_manager = self.data_manager
-            
+            self.settings_panel.update_video_recorder_callback = self.update_video_recorder_setting
+
             # Handle role-based access to settings tabs - with error handling
             try:
                 if self.user_role != 'admin' and hasattr(self.settings_panel, 'settings_notebook'):
@@ -1511,6 +1512,15 @@ class TharuniApp:
             
         except Exception as e:
             self.logger.error(f"Error ensuring settings persistence: {e}")
+
+    def update_video_recorder_setting(self, enabled):
+        """Update video recorder enabled state (called from settings panel toggle)"""
+        try:
+            if hasattr(self, 'main_form') and hasattr(self.main_form, 'video_recorder'):
+                self.main_form.video_recorder.set_recording_enabled(enabled)
+                self.logger.info(f"📹 Video recording {'enabled' if enabled else 'disabled'}")
+        except Exception as e:
+            self.logger.error(f"Error updating video recorder setting: {e}")
 
     def update_camera_indices(self, settings):
         """Update camera settings with error handling"""

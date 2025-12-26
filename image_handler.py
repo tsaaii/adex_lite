@@ -362,6 +362,16 @@ class ImageHandler:
             
             # Show success message
             messagebox.showinfo("Success", f"{weighment_label} weighment front image saved successfully!")
+
+            try:
+                if hasattr(self.main_form, 'video_recorder'):
+                    video_recorder = self.main_form.video_recorder
+                    if video_recorder.is_recording:
+                        video_recorder.stop_recording(save=True)
+                        print("🎬 Video recording stopped and clip saved with front image")
+            except Exception as e:
+                print(f"Error stopping video recording: {e}")            
+            
             return True
             
         except Exception as e:
@@ -480,6 +490,16 @@ class ImageHandler:
             
             # Show success message
             messagebox.showinfo("Success", f"{weighment_label} weighment back image saved successfully!")
+
+
+            try:
+                if hasattr(self.main_form, 'video_recorder'):
+                    video_recorder = self.main_form.video_recorder
+                    if video_recorder.is_recording:
+                        video_recorder.stop_recording(save=True)
+                        print("🎬 Video recording stopped and clip saved with back image")
+            except Exception as e:
+                print(f"Error stopping video recording: {e}")            
             return True
             
         except Exception as e:

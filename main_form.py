@@ -11,7 +11,7 @@ import threading
 import config
 from ui_components import HoverButton
 from camera import CameraView, add_watermark
-
+from video_recorder import VideoRecorder
 # Import modular components
 from form_validation import FormValidator
 from weight_manager import WeightManager
@@ -43,7 +43,8 @@ class MainForm:
         self.view_callback = view_callback
         self.clear_callback = clear_callback
         self.exit_callback = exit_callback
-        
+        self.video_recorder = VideoRecorder(main_form=self)
+        self.load_video_recording_setting()
         # Initialize form variables
         self.init_variables()
         
@@ -92,6 +93,21 @@ class MainForm:
             
             self.logger = FallbackLogger()
             print(f"MainForm logger setup failed: {e}, using fallback")
+
+
+    def load_video_recording_setting(self):
+        settings_storage = self.get_settings_storage()
+        if settings_storage:
+            video_settings = settings_storage.get_video_recording_settings()
+            self.video_recorder.set_recording_enabled(video_settings.get("enabled", False))
+
+    def connect_cameras_to_video_recorder(self):
+        if hasattr(self, 'front_camera') and self.front_camera:
+            self.front_camera.video_recorder = self.video_recorder
+            self.front_camera.camera_id = "front"
+        if hasattr(self, 'back_camera') and self.back_camera:
+            self.back_camera.video_recorder = self.video_recorder
+            self.back_camera.camera_id = "back"
 
     def create_form(self, parent):
         """Create the main data entry form with weighment panel including current weight display"""

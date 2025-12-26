@@ -307,6 +307,33 @@ class SettingsStorage:
             print(f"Error resetting ticket counter: {e}")
             return False
 
+    def get_video_recording_settings(self):
+        """Get video recording settings from file"""
+        try:
+            with open(self.settings_file, 'r') as f:
+                settings = json.load(f)
+                return settings.get("video_recording", {"enabled": False})
+        except Exception as e:
+            return {"enabled": False, "fps": 15, "max_duration": 120}
+
+    def save_video_recording_settings(self, settings):
+        """Save video recording settings to file"""
+        try:
+            if os.path.exists(self.settings_file):
+                with open(self.settings_file, 'r') as f:
+                    all_settings = json.load(f)
+            else:
+                all_settings = {}
+            
+            all_settings["video_recording"] = settings
+            
+            with open(self.settings_file, 'w') as f:
+                json.dump(all_settings, f, indent=4)
+            return True
+        except:
+            return False
+
+
     def get_weighbridge_settings(self):
         """Get weighbridge settings from file
         

@@ -21,6 +21,8 @@ class SummaryPanel:
         """
         self.parent = parent
         self.data_manager = data_manager
+        self.video_recording_var = tk.BooleanVar(value=False)
+        self.update_video_recorder_callback = None
         
         # Create summary variables
         self.filter_var = tk.StringVar()
