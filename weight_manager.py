@@ -483,6 +483,7 @@ class WeightManager:
                     print(f"📊 Normal mode: weight {weight:.2f} kg")
                 
                 # First weighment - store the (possibly boosted) weight
+                self.main_form.current_weight_var.set(f"{weight:.2f} kg")
                 self.main_form.first_weight_var.set(f"{weight:.2f}")
                 self.main_form.first_timestamp_var.set(timestamp)
                 self.main_form.current_weighment = "second"
@@ -493,8 +494,11 @@ class WeightManager:
                 # Enhanced message for nitro mode
                 if config.is_nitro_boost_enabled():
                     boost_amount = config.get_global_stability_readings() * 1000
-                    messagebox.showinfo("FIRST WEIGHT CAPTURED", 
-                                    f" Weight: {original_weight:.2f} kg\n")
+                    messagebox.showinfo("First Weight Captured", 
+                                    f"First weighment: {weight:.2f} kg\n"
+                                    f"Time: {timestamp}\n"
+                                    f"Mode: {mode_text}\n\n"
+                                    f"Vehicle can now exit and return for second weighment.")
                 else:
                     messagebox.showinfo("First Weight Captured", 
                                     f"First weighment: {weight:.2f} kg\n"

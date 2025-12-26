@@ -724,21 +724,94 @@ class ReportGenerator:
     
     def get_selected_record_data(self):
         """
-        Get the full data for selected records - ENHANCED with ticket number sorting
+        Get the full data for selected records - ENHANCED with proper DATE sorting for PDF
         """
         if not self.selected_records:
             return []
+        
+        def parse_date_for_sorting(date_str):
+            """Parse DD-MM-YYYY date string for proper chronological sorting"""
+            try:
+                if not date_str or not date_str.strip():
+                    return datetime.datetime.max
+                return datetime.datetime.strptime(date_str.strip(), "%d-%m-%Y")
+            except (ValueError, TypeError):
+                return datetime.datetime.max
+
+        def get_sort_key(record):
+            """Create sort key: date, time, ticket number"""
+            date_key = parse_date_for_sorting(record.get('date', ''))
+            
+            time_str = record.get('time', '').strip()
+            try:
+                time_key = datetime.datetime.strptime(time_str, "%H:%M:%S").time() if time_str else datetime.time.min
+            except:
+                time_key = datetime.time.min
+            
+            ticket_str = record.get('ticket_no', '')
+            try:
+                import re
+                numbers = re.findall(r'\d+', str(ticket_str))
+                ticket_key = int(numbers[-1]) if numbers else 0
+            except:
+                ticket_key = 0
+            
+            return (date_key, time_key, ticket_key)
         
         selected_data = []
         for record in self.all_records:
             if record.get('ticket_no', '') in self.selected_records:
                 selected_data.append(record)
         
-        # ENHANCEMENT: Sort by ticket number before returning
-        selected_data = self.sort_records_by_ticket_number(selected_data)
+        # ENHANCEMENT: Sort by DATE in ascending order (DD-MM-YYYY format parsed properly)
+        selected_data.sort(key=get_sort_key)
+        
+        print(f"SELECTED DATA SORTED: {len(selected_data)} records sorted by date for PDF export")
+        if selected_data:
+            first_date = selected_data[0].get('date', 'Unknown')
+            last_date = selected_data[-1].get('date', 'Unknown')
+            print(f"DATE RANGE: {first_date} to {last_date}")
         
         return selected_data
-    
+
+    def verify_pdf_date_sorting(self, records_data):
+        """Verify that records are properly sorted by date for PDF output"""
+        print(f"\nPDF DATE SORTING VERIFICATION:")
+        print(f"Total records: {len(records_data)}")
+        
+        if not records_data:
+            print("No records to verify")
+            return
+        
+        # Show first 10 records to verify sorting
+        print("First 10 records (should be in date ascending order):")
+        for i, record in enumerate(records_data[:10]):
+            date_str = record.get('date', 'No date')
+            time_str = record.get('time', 'No time')
+            ticket_str = record.get('ticket_no', 'No ticket')
+            material_str = record.get('material', 'No material')
+            print(f"  {i+1:2d}. {date_str} {time_str} | {ticket_str} | {material_str}")
+        
+        if len(records_data) > 10:
+            print(f"... and {len(records_data) - 10} more records")
+        
+        # Check for date parsing issues
+        invalid_dates = 0
+        for record in records_data:
+            date_str = record.get('date', '').strip()
+            if date_str:
+                try:
+                    datetime.datetime.strptime(date_str, "%d-%m-%Y")
+                except (ValueError, TypeError):
+                    invalid_dates += 1
+        
+        if invalid_dates > 0:
+            print(f"WARNING: {invalid_dates} records have invalid date format")
+        else:
+            print("All dates are valid DD-MM-YYYY format")
+        
+        print("="*50)
+
     def sort_records_by_ticket_number(self, records_data):
         """
         Sort records by ticket number in increasing order.
@@ -1323,21 +1396,59 @@ class ReportGenerator:
             return {}
 
     def group_records_by_material(self, records_data):
-        """Group records by material type for table generation
+        """Group records by material type for table generation - FIXED with proper DD-MM-YYYY date sorting
         
         Args:
             records_data: List of record dictionaries
             
         Returns:
-            dict: Records grouped by material type
+            dict: Records grouped by material type, sorted by date within each group
         """
+        def parse_date_for_sorting(date_str):
+            """Parse DD-MM-YYYY date string for proper chronological sorting"""
+            try:
+                if not date_str or not date_str.strip():
+                    return datetime.datetime.max  # Put empty dates at the end
+                
+                # Parse DD-MM-YYYY format to datetime object
+                return datetime.datetime.strptime(date_str.strip(), "%d-%m-%Y")
+            except (ValueError, TypeError):
+                print(f"Warning: Invalid date format '{date_str}' - putting at end of sort")
+                return datetime.datetime.max  # Put invalid dates at the end
+
+        def get_sort_key(record):
+            """Create sort key for record: date, then time, then ticket number"""
+            # Primary sort: Date (parsed as datetime)
+            date_key = parse_date_for_sorting(record.get('date', ''))
+            
+            # Secondary sort: Time
+            time_str = record.get('time', '').strip()
+            try:
+                if time_str:
+                    time_key = datetime.datetime.strptime(time_str, "%H:%M:%S").time()
+                else:
+                    time_key = datetime.time.min  # Put records without time first
+            except (ValueError, TypeError):
+                time_key = datetime.time.min
+            
+            # Tertiary sort: Ticket number (numeric part)
+            ticket_str = record.get('ticket_no', '')
+            try:
+                import re
+                numbers = re.findall(r'\d+', str(ticket_str))
+                ticket_key = int(numbers[-1]) if numbers else 0
+            except:
+                ticket_key = 0
+            
+            return (date_key, time_key, ticket_key)
+
         try:
             grouped_records = {}
             
+            # Group records by material
             for record in records_data:
                 # Get material type - check multiple possible field names
                 material = (
-                    record.get('material', '') or 
                     record.get('material', '') or 
                     record.get('transfer_party', '') or 
                     'Unknown Material'
@@ -1352,20 +1463,33 @@ class ReportGenerator:
                 
                 grouped_records[material].append(record)
             
-            # Sort records within each material group by date and time
+            # FIXED: Sort records within each material group by DATE (DD-MM-YYYY) in ascending order
             for material in grouped_records:
-                grouped_records[material].sort(key=lambda r: (
-                    r.get('date', ''), 
-                    r.get('time', ''),
-                    r.get('ticket_no', '')
-                ))
+                original_count = len(grouped_records[material])
+                grouped_records[material].sort(key=get_sort_key)
+                
+                print(f"PDF DATE SORT - {material}: {original_count} records sorted by date (ascending)")
+                
+                # Show first few records for verification
+                for i, record in enumerate(grouped_records[material][:3]):
+                    date_str = record.get('date', 'No date')
+                    time_str = record.get('time', 'No time')
+                    ticket_str = record.get('ticket_no', 'No ticket')
+                    print(f"  {i+1}. {date_str} {time_str} - {ticket_str}")
+                
+                if len(grouped_records[material]) > 3:
+                    print(f"  ... and {len(grouped_records[material]) - 3} more")
             
-            print(f"📋 RECORD GROUPING: Grouped {len(records_data)} records into {len(grouped_records)} material types")
+            total_materials = len(grouped_records)
+            total_records = sum(len(records) for records in grouped_records.values())
+            print(f"PDF GROUPING COMPLETE: {total_records} records in {total_materials} material groups, all sorted by date")
             
             return grouped_records
             
         except Exception as e:
             print(f"Error grouping records by material: {e}")
+            import traceback
+            print(f"Detailed error: {traceback.format_exc()}")
             return {'Unknown Material': records_data}  # Fallback
 
     def export_selected_to_pdf(self):

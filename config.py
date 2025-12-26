@@ -30,18 +30,18 @@ MAIN_CSV_RETENTION_DAYS = 2  # Keep only today + last 2 days in main CSV
 ARCHIVE_FOLDER = None  # Will be set in setup()
 
 HARDCODED_MODE = True  # Set to True to use hardcoded values
-HARDCODED_AGENCY = "Saurashtra Enviro Projects Pvt. Ltd."
-HARDCODED_SITE = "Nandyal"
+HARDCODED_AGENCY = "Tharuni Associates"
+HARDCODED_SITE = "Tharuni Proddaturux"
 HARDCODED_USER = "admin"
 HARDCODED_PASSWORD = "admin" 
-HARDCODED_SITEMANAGER = "Avijit Mondal" 
+HARDCODED_SITEMANAGER = "Ravi Kotambeti"
 WEIGHT_TOLERANCE = 1.0  # kg - adjust for your needs
 STABLE_READINGS_REQUIRED = 3  # readings - adjust for stability vs responsiveness
 MIN_WEIGHT_CHANGE = 50.0  # minimum kg change between weighments
-WEIGHT_CAPTURE_TIMEOUT = 5.0  # seconds to wait for stable weight
+WEIGHT_CAPTURE_TIMEOUT = 2.0  # seconds to wait for stable weight
 HARDCODED_AGENCIES = [HARDCODED_AGENCY]
 HARDCODED_TRANSFER_PARTIES = ["On-site"]
-HARDCODED_INCHARGE = "Avijit Mondal"
+HARDCODED_INCHARGE = "Ravi Kotambeti"
 HARDCODED_MATERIALS = ["Legacy/MSW", "Inert", "Soil", "Construction and Demolition", "RDF(REFUSE DERIVED FUEL)","Scrap"]
 HARDCODED_SITES = [HARDCODED_SITE]
 

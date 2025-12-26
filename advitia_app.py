@@ -2,8 +2,9 @@
 # pyinstaller ^
 #   --onedir ^
 #   --windowed ^
-#   --name="SAC_monitor_Test" ^
-#   --icon=right.ico ^
+#   --name="SAC_monitor_Proddaturu" ^
+#   --add-data "assets/tharuni.png;assets" ^
+#   --icon=tharuni.ico ^
 #   --add-data "data;data" ^
 #   --add-data "assets/logo.png;assets" ^
 #   --hidden-import=serial ^
@@ -29,8 +30,13 @@
 #   --exclude-module=cv2.face ^
 #   --exclude-module=cv2.tracking ^
 #   --optimize=2 ^
-#   --str
+#   --str 
 #   advitia_app.py
+
+
+
+#   --add-data "assets/tharuni.png;assets" ^
+#   --icon=tharuni.ico ^
 
 import tkinter as tk
 import os
@@ -251,16 +257,17 @@ class TharuniApp:
             self.logger.error(f"Authentication error: {e}")
             self.root.quit()
 
-
-    def resource_path(relative_path):
+    
+    def resource_path(self, relative_path):
         """ Get absolute path to resource, works for dev and for PyInstaller """
         try:
             # PyInstaller creates a temp folder and stores path in _MEIPASS
+            import sys
             base_path = sys._MEIPASS
         except Exception:
             base_path = os.path.abspath(".")
         
-        return os.path.join(base_path, relative_path)
+        return os.path.join(base_path, relative_path)    
 
     def show_enhanced_login_dialog(self):
         """Show enhanced login dialog with logo and site information"""
@@ -305,8 +312,14 @@ class TharuniApp:
             logo_frame = ttk.Frame(main_frame)
             logo_frame.pack(fill=tk.X, pady=(0, 20))
             
-            # Try to load logo
-            logo_loaded = False
+            # Create a container for horizontal logo layout
+            logos_container = ttk.Frame(logo_frame)
+            logos_container.pack()
+            
+            # Try to load both logos
+            logos_loaded = 0
+            
+            # First logo (original)
             try:
                 # Look for logo in multiple locations
                 possible_logo_paths = [
@@ -327,10 +340,10 @@ class TharuniApp:
                             logo_image.thumbnail((150, 100), Image.Resampling.LANCZOS)
                             logo_photo = ImageTk.PhotoImage(logo_image)
                             
-                            logo_label = ttk.Label(logo_frame, image=logo_photo)
+                            logo_label = ttk.Label(logos_container, image=logo_photo)
                             logo_label.image = logo_photo  # Keep reference
-                            logo_label.pack(pady=(0, 10))
-                            logo_loaded = True
+                            logo_label.pack(side=tk.LEFT, padx=10, pady=(0, 10))
+                            logos_loaded += 1
                             break
                         except Exception as e:
                             self.logger.warning(f"Could not load logo from {logo_path}: {e}")
@@ -339,8 +352,31 @@ class TharuniApp:
             except Exception as e:
                 self.logger.warning(f"Logo loading error: {e}")
             
-            # If no logo loaded, show company name
-            if not logo_loaded:
+            # Second logo (tharuni.png)
+            try:
+                tharuni_logo_path = os.path.join("assets", "tharuni.png")
+                tharuni_full_path = self.resource_path(tharuni_logo_path) 
+                
+                if os.path.exists(tharuni_full_path):
+                    try:
+                        tharuni_image = Image.open(tharuni_full_path)
+                        # Load and resize tharuni logo (same size as first logo)
+                        # Resize to same dimensions (max 150x100)
+                        tharuni_image.thumbnail((120, 80), Image.Resampling.LANCZOS)
+                        tharuni_photo = ImageTk.PhotoImage(tharuni_image)
+                        
+                        tharuni_label = ttk.Label(logos_container, image=tharuni_photo)
+                        tharuni_label.image = tharuni_photo  # Keep reference
+                        tharuni_label.pack(side=tk.LEFT, padx=10, pady=(0, 10))
+                        logos_loaded += 1
+                    except Exception as e:
+                        self.logger.warning(f"Could not load tharuni logo: {e}")
+                        
+            except Exception as e:
+                self.logger.warning(f"Tharuni logo loading error: {e}")
+            
+            # If no logos loaded, show company name
+            if logos_loaded == 0:
                 company_label = ttk.Label(logo_frame, 
                                         text="Weight Management System",
                                         font=("Segoe UI", 16, "bold"),
