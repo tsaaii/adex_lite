@@ -13,7 +13,7 @@ class WeightManager:
         self.min_weight_change = 0.0  # minimum kg change to consider valid weighment
         
     def capture_weight(self):
-        """FIXED: Capture weight with corrected pending vehicle check"""
+        """FIXED: Capture weight with VIDEO RECORDING support"""
         try:
             print("=== CORRECTED WEIGHT CAPTURE ===")
             
@@ -23,6 +23,14 @@ class WeightManager:
                 return False
             
             print("✅ Vehicle check passed - proceeding with weight capture")
+            
+            # ============================================
+            # VIDEO RECORDING - START HERE (FIX ADDED)
+            # This was missing - video recording must start
+            # BEFORE weight capture, not in a separate method
+            # ============================================
+            self._start_video_recording_if_enabled()
+            # ============================================
             
             # Check test mode first using improved method
             if self.is_test_mode_enabled():
@@ -49,6 +57,66 @@ class WeightManager:
             traceback.print_exc()
             messagebox.showerror("Error", f"Failed to capture weight: {str(e)}")
             return False
+    
+    def _start_video_recording_if_enabled(self):
+        """Start video recording if enabled - called at beginning of weight capture"""
+        try:
+            print(f"\n🎥 VIDEO RECORDING CHECK...")
+            print(f"   has video_recorder: {hasattr(self.main_form, 'video_recorder')}")
+            
+            if not hasattr(self.main_form, 'video_recorder'):
+                print(f"   ⚠️ No video_recorder attribute on main_form")
+                return
+            
+            video_recorder = self.main_form.video_recorder
+            
+            if video_recorder is None:
+                print(f"   ⚠️ video_recorder is None")
+                return
+            
+            print(f"   recording_enabled: {video_recorder.recording_enabled}")
+            print(f"   is_enabled(): {video_recorder.is_enabled()}")
+            print(f"   is_recording: {video_recorder.is_recording}")
+            
+            if not video_recorder.is_enabled():
+                print(f"   ⚠️ Video recording is DISABLED in settings")
+                return
+            
+            # Get current vehicle and site info
+            vehicle_no = self.main_form.vehicle_var.get()
+            site_name = self.main_form.site_var.get()
+            
+            # Determine weighment type based on existing first weight
+            weighment_type = "first"
+            if hasattr(self.main_form, 'first_weight_var'):
+                first_weight = self.main_form.first_weight_var.get()
+                if first_weight and first_weight.strip() and first_weight != "0" and first_weight != "0.00":
+                    weighment_type = "second"
+            
+            print(f"   🎬 Starting video recording...")
+            print(f"      Vehicle: {vehicle_no}")
+            print(f"      Site: {site_name}")
+            print(f"      Weighment: {weighment_type}")
+            
+            # START RECORDING
+            result = video_recorder.start_recording(
+                vehicle_number=vehicle_no,
+                site_name=site_name,
+                weighment_type=weighment_type
+            )
+            
+            print(f"   start_recording result: {result}")
+            print(f"   is_recording after start: {video_recorder.is_recording}")
+            
+            if result:
+                print(f"🎬 VIDEO RECORDING STARTED for {weighment_type} weight capture")
+            else:
+                print(f"⚠️ VIDEO RECORDING FAILED TO START")
+                
+        except Exception as e:
+            print(f"⚠️ Error starting video recording: {e}")
+            import traceback
+            traceback.print_exc()
     
     def check_vehicle_for_weight_capture(self):
         """FIXED: Check vehicle status for weight capture with corrected logic"""
@@ -108,28 +176,8 @@ class WeightManager:
         try:
             print(f"\n🚀 ═══ WEIGHT CAPTURE STARTING ═══")
             
-            if hasattr(self.main_form, 'video_recorder'):
-                video_recorder = self.main_form.video_recorder
-                
-                if video_recorder.is_enabled():
-                    # Get current vehicle and site info
-                    vehicle_no = self.main_form.vehicle_var.get()
-                    site_name = self.main_form.site_var.get()
-                    
-                    # Determine weighment type based on existing first weight
-                    weighment_type = "first"
-                    if hasattr(self.main_form, 'first_weight_var'):
-                        first_weight = self.main_form.first_weight_var.get()
-                        if first_weight and first_weight.strip() and first_weight != "0":
-                            weighment_type = "second"
-                    
-                    # Start video recording
-                    video_recorder.start_recording(
-                        vehicle_number=vehicle_no,
-                        site_name=site_name,
-                        weighment_type=weighment_type
-                    )
-                    print(f"🎬 Video recording started for {weighment_type} weight capture")            
+            # Note: Video recording is now started in capture_weight() 
+            # via _start_video_recording_if_enabled()
             
             # Debug nitro mode status before capture
             nitro_info = self.get_nitro_mode_info()

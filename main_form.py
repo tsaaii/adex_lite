@@ -60,7 +60,7 @@ class MainForm:
         # Create UI elements
         self.create_form(parent)
         self.create_cameras_panel(parent)
-        
+        self.connect_cameras_to_video_recorder()
         # Initialize vehicle autocomplete
         self.vehicle_autocomplete.refresh_cache()
 
@@ -96,10 +96,17 @@ class MainForm:
 
 
     def load_video_recording_setting(self):
-        settings_storage = self.get_settings_storage()
-        if settings_storage:
-            video_settings = settings_storage.get_video_recording_settings()
-            self.video_recorder.set_recording_enabled(video_settings.get("enabled", False))
+        """Load video recording setting from storage"""
+        try:
+            from settings_storage import SettingsStorage
+            storage = SettingsStorage()
+            settings = storage.get_video_recording_settings()
+            if settings:
+                enabled = settings.get("enabled", False)
+                self.video_recorder.set_recording_enabled(enabled)
+                print(f"📹 Video recording loaded: {'enabled' if enabled else 'disabled'}")
+        except Exception as e:
+            print(f"Error loading video recording setting: {e}")
 
     def connect_cameras_to_video_recorder(self):
         if hasattr(self, 'front_camera') and self.front_camera:
