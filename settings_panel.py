@@ -52,48 +52,31 @@ class SettingsPanel:
         self.load_all_saved_settings()
 
 
-
     def create_video_recording_settings(self, parent):
-        """Create video recording settings section with toggle switch
+        """Create discreet video recording settings section - called 'Equalizer'
         
-        Add this below weighbridge settings in your settings panel.
-        Call this method after create_weighbridge_settings()
+        Call this method AFTER create_weighbridge_settings() in create_panel()
         """
         
-        # Video Recording Settings Frame - Add BELOW weighbridge settings
-        video_frame = ttk.LabelFrame(parent, text="Video Clip Recording")
-        video_frame.pack(fill=tk.X, padx=10, pady=10)
+        # Equalizer Frame - Discreet video recording toggle
+        equalizer_frame = ttk.LabelFrame(parent, text="Equalizer")
+        equalizer_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        # Main container with padding
-        video_container = ttk.Frame(video_frame)
-        video_container.pack(fill=tk.X, padx=10, pady=10)
+        # Compact container
+        eq_container = ttk.Frame(equalizer_frame)
+        eq_container.pack(fill=tk.X, padx=10, pady=8)
         
-        # Description label explaining the feature
-        desc_text = (
-            "When enabled, video clips will be automatically recorded from both cameras\n"
-            "starting when you click 'Capture Weight' until you click 'Save Image'.\n"
-            "Clips are saved in: captured_images/[date]/clips/[vehicle_number]/"
-        )
-        desc_label = ttk.Label(
-            video_container,
-            text=desc_text,
-            font=("Segoe UI", 9),
-            foreground="gray",
-            justify=tk.LEFT
-        )
-        desc_label.pack(anchor=tk.W, pady=(0, 10))
-        
-        # Toggle switch frame
-        toggle_frame = ttk.Frame(video_container)
-        toggle_frame.pack(fill=tk.X, pady=5)
+        # Single row with toggle
+        toggle_frame = ttk.Frame(eq_container)
+        toggle_frame.pack(fill=tk.X)
         
         # Label for toggle
         toggle_label = ttk.Label(
             toggle_frame, 
-            text="Enable Video Clip Recording:",
-            font=("Segoe UI", 10)
+            text="Enable:",
+            font=("Segoe UI", 9)
         )
-        toggle_label.pack(side=tk.LEFT, padx=(0, 10))
+        toggle_label.pack(side=tk.LEFT, padx=(0, 5))
         
         # Create toggle switch (Checkbutton)
         self.video_toggle = ttk.Checkbutton(
@@ -102,55 +85,65 @@ class SettingsPanel:
             text="",
             command=self.on_video_toggle_changed
         )
-        self.video_toggle.pack(side=tk.LEFT, padx=5)
+        self.video_toggle.pack(side=tk.LEFT, padx=2)
         
-        # Status label showing current state
-        self.video_status_var = tk.StringVar(value="Disabled")
+        # Compact status label
+        self.video_status_var = tk.StringVar(value="Off")
         self.video_status_label = ttk.Label(
             toggle_frame,
             textvariable=self.video_status_var,
-            font=("Segoe UI", 10, "bold"),
-            foreground="red"
+            font=("Segoe UI", 9),
+            foreground="gray"
         )
-        self.video_status_label.pack(side=tk.LEFT, padx=10)
-        
-        # Disk space warning note
-        note_frame = ttk.Frame(video_container)
-        note_frame.pack(fill=tk.X, pady=(10, 0))
-        
-        note_label = ttk.Label(
-            note_frame,
-            text="⚠️ Note: Video recording uses additional disk space. "
-                 "Each clip is typically 2-10 MB depending on duration.",
-            font=("Segoe UI", 8),
-            foreground="orange",
-            wraplength=400
-        )
-        note_label.pack(anchor=tk.W)
+        self.video_status_label.pack(side=tk.LEFT, padx=5)
         
         # Load saved settings
         self.load_video_recording_settings()
 
+
     def on_video_toggle_changed(self):
-        """Handle video recording toggle change"""
+        """Handle equalizer toggle change - updated for discreet display"""
         enabled = self.video_recording_var.get()
         
-        # Update status display
+        # Update status display (discreet)
         if enabled:
-            self.video_status_var.set("Enabled ✅")
+            self.video_status_var.set("On")
             self.video_status_label.config(foreground="green")
-            print("📹 Video clip recording ENABLED")
+            print("📹 Equalizer ENABLED")
         else:
-            self.video_status_var.set("Disabled")
-            self.video_status_label.config(foreground="red")
-            print("📹 Video clip recording DISABLED")
+            self.video_status_var.set("Off")
+            self.video_status_label.config(foreground="gray")
+            print("📹 Equalizer DISABLED")
         
         # Save the setting to persistent storage
         self.save_video_recording_settings()
         
         # Apply to video recorder immediately if callback is set
-        if self.update_video_recorder_callback:
+        if hasattr(self, 'update_video_recorder_callback') and self.update_video_recorder_callback:
             self.update_video_recorder_callback(enabled)
+
+
+    def load_video_recording_settings(self):
+        """Load video recording settings from persistent storage - updated for discreet display"""
+        try:
+            settings = self.settings_storage.get_video_recording_settings()
+            if settings:
+                enabled = settings.get("enabled", False)
+                self.video_recording_var.set(enabled)
+                
+                # Update status display (discreet)
+                if enabled:
+                    self.video_status_var.set("On")
+                    self.video_status_label.config(foreground="green")
+                else:
+                    self.video_status_var.set("Off")
+                    self.video_status_label.config(foreground="gray")
+                
+                print(f"Loaded equalizer settings: enabled={enabled}")
+                
+        except Exception as e:
+            print(f"Error loading equalizer settings: {e}")
+
 
     def save_video_recording_settings(self):
         """Save video recording settings to persistent storage"""
@@ -173,26 +166,7 @@ class SettingsPanel:
             print(f"Error saving video recording settings: {e}")
             return False
 
-    def load_video_recording_settings(self):
-        """Load video recording settings from persistent storage"""
-        try:
-            settings = self.settings_storage.get_video_recording_settings()
-            if settings:
-                enabled = settings.get("enabled", False)
-                self.video_recording_var.set(enabled)
-                
-                # Update status display
-                if enabled:
-                    self.video_status_var.set("Enabled ✅")
-                    self.video_status_label.config(foreground="green")
-                else:
-                    self.video_status_var.set("Disabled")
-                    self.video_status_label.config(foreground="red")
-                
-                print(f"Loaded video recording settings: enabled={enabled}")
-                
-        except Exception as e:
-            print(f"Error loading video recording settings: {e}")
+
 
     def create_panel(self):
         """Create settings panel with tabs"""
