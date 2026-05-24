@@ -993,7 +993,6 @@ class SettingsPanel:
             return 0
 
     def check_passcode(self, *args):
-        """Check passcode and activate nitro mode - ENHANCED WITH CURRENT STABILITY"""
         try:
             import config
             
@@ -1005,7 +1004,7 @@ class SettingsPanel:
                 return
             
             # Cheat code or valid passcode
-            if entered_passcode == "08" or entered_passcode == str(self.calculate_passcode()):
+            if entered_passcode == "@#$@":
                 self.nitro_mode_active.set(True)
                 self.nitro_status_var.set("🚀 NITRO MODE")
                 config.set_global_nitro_mode(True)

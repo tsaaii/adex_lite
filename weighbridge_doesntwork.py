@@ -56,9 +56,6 @@ class WeighbridgeManager:
         self.custom_regex_pattern = None
         self.use_custom_pattern = False
         
-        # Weight multiplier for special formats (e.g., "11.00Kg" = 1100kg)
-        self.weight_multiplier = 1
-        
         # NEW: Pre-compiled pattern cache to avoid recompilation
         self._pattern_cache = {}
         self._current_pattern_key = None
@@ -116,27 +113,6 @@ class WeighbridgeManager:
             self.logger.print_error(f"Unexpected error updating regex pattern: {e}")
             return False
 
-    def update_weight_multiplier(self, multiplier):
-        """Update weight multiplier for special formats (e.g., 11.00Kg = 1100kg)
-        
-        Args:
-            multiplier (float): Multiplier to apply to parsed weight (default 1.0)
-            
-        Returns:
-            bool: True if multiplier was updated successfully
-        """
-        try:
-            multiplier = float(multiplier)
-            if multiplier <= 0:
-                self.logger.print_error(f"Invalid multiplier: {multiplier}. Must be positive.")
-                return False
-            self.weight_multiplier = multiplier
-            self.logger.print_success(f"Weight multiplier updated: {multiplier}")
-            return True
-        except (ValueError, TypeError) as e:
-            self.logger.print_error(f"Invalid multiplier value: {e}")
-            return False
-
     def load_settings_and_apply_regex(self, settings_storage):
         """Load regex pattern from settings storage and apply it"""
         try:
@@ -146,10 +122,6 @@ class WeighbridgeManager:
             
             wb_settings = settings_storage.get_weighbridge_settings()
             regex_pattern = wb_settings.get("regex_pattern", r'(\d+\.?\d*)')
-            
-            # Load weight multiplier from settings (default 1.0 for backward compatibility)
-            multiplier = wb_settings.get("weight_multiplier", self.weight_multiplier)
-            self.update_weight_multiplier(multiplier)
             
             self.logger.print_info(f"Loading regex pattern from settings: {regex_pattern}")
             success = self.update_regex_pattern(regex_pattern)
@@ -244,14 +216,13 @@ class WeighbridgeManager:
             data_line: Raw data string from weighbridge
             
         Returns:
-            float: Parsed weight in kg (with multiplier applied), or None if parsing failed
+            float: Parsed weight in kg, or None if parsing failed
         """
         try:
             # Use cached compiled pattern - no regex compilation in main loop
             match = self.weight_pattern.search(data_line)
             if match:
-                raw_weight = float(match.group(1))
-                return raw_weight * self.weight_multiplier
+                return float(match.group(1))
             return None
             
         except:
@@ -506,7 +477,6 @@ class WeighbridgeManager:
             'consecutive_errors': self.consecutive_errors,
             'pattern': self.regex_pattern_string or '(\\d+\\.?\\d*)',
             'pattern_loaded_from_settings': self.use_custom_pattern,
-            'weight_multiplier': self.weight_multiplier,
             'optimized': True,
             'pattern_cache_size': len(self._pattern_cache),
             'current_pattern_cached': self._current_pattern_key is not None

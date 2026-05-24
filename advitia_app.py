@@ -2,11 +2,12 @@
 # pyinstaller ^
 #   --onedir ^
 #   --windowed ^
-#   --name="SAC_monitor_Proddaturu" ^
-#   --add-data "assets/tharuni.png;assets" ^
-#   --icon=tharuni.ico ^
+#   --name="SAC_monitor_Geron_Giddalur" ^
+#   --add-data "assets/logo.png;assets" ^
+#   --icon=right.ico ^
 #   --add-data "data;data" ^
 #   --add-data "assets/logo.png;assets" ^
+#   --icon=right.ico ^
 #   --hidden-import=serial ^
 #   --hidden-import=serial.tools.list_ports ^
 #   --hidden-import=google.cloud.storage ^
@@ -35,8 +36,7 @@
 
 
 
-#   --add-data "assets/tharuni.png;assets" ^
-#   --icon=tharuni.ico ^
+
 
 import tkinter as tk
 import os
