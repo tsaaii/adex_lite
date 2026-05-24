@@ -10,6 +10,7 @@ from tkinter import messagebox, filedialog
 import config
 import shutil
 from cloud_storage import CloudStorageService
+from csv_safe_io import atomic_write_csv, append_csv_row, set_readonly, cleanup_stale_temp_files
 import config
 import datetime
 # Import PDF generation capabilities
@@ -256,19 +257,11 @@ class DataManager:
                         # Keep in main CSV (recent or from incomplete days)
                         keep_records.append(row)
             
-            # Create archive part file
-            with open(archive_path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow(config.CSV_HEADER)
-                for record in archive_records:
-                    writer.writerow(record)
-            
-            # Update main CSV with remaining records
-            with open(current_file, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow(config.CSV_HEADER)
-                for record in keep_records:
-                    writer.writerow(record)
+            # Create archive part file (atomic, crash-safe)
+            atomic_write_csv(archive_path, config.CSV_HEADER, archive_records)
+
+            # Update main CSV with remaining records (atomic, crash-safe)
+            atomic_write_csv(current_file, config.CSV_HEADER, keep_records)
             
             # Update tracking
             self.current_archive_part += 1
@@ -592,6 +585,132 @@ class DataManager:
             self.logger.error(f"Error reading records from {current_file}: {e}")
             return []
     
+    def _to_float(self, value):
+        """Convert a weight value to float, or None if blank/invalid."""
+        try:
+            if value is None:
+                return None
+            value = str(value).strip()
+            if value == "":
+                return None
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def get_previous_trip_min_weight(self, vehicle_no):
+        """Return the minimum (empty) weight of this vehicle's most recent
+        COMPLETED trip, or None if it has no completed trip on record.
+
+        A completed trip has both a first and a second weight; the lighter of
+        the two is the vehicle's empty weight for that trip.
+        """
+        vehicle_no = (vehicle_no or "").strip().upper()
+        if not vehicle_no:
+            return None
+
+        try:
+            records = self.get_all_records()
+        except Exception as e:
+            self.logger.error(f"Could not read records for previous-trip lookup: {e}")
+            return None
+
+        completed = []
+        for rec in records:
+            if (rec.get("vehicle_no", "") or "").strip().upper() != vehicle_no:
+                continue
+            first = self._to_float(rec.get("first_weight", ""))
+            second = self._to_float(rec.get("second_weight", ""))
+            if first is None or second is None:
+                continue  # not a completed trip - skip
+            completed.append(rec)
+
+        if not completed:
+            return None
+
+        # Most recent completed trip, ordered by second timestamp then ticket
+        def _sort_key(rec):
+            return (
+                rec.get("second_timestamp", "") or rec.get("first_timestamp", "") or "",
+                rec.get("ticket_no", "") or "",
+            )
+
+        completed.sort(key=_sort_key)
+        latest = completed[-1]
+        first = self._to_float(latest.get("first_weight", ""))
+        second = self._to_float(latest.get("second_weight", ""))
+        return min(first, second)
+
+    def check_new_first_weight(self, vehicle_no, new_weight, variance_pct=20.0):
+        """Validate the first weight of a NEW trip against the vehicle's
+        previous completed trip.
+
+        Rule: the new first weight must be within +/- variance_pct of the
+        minimum (empty) weight of the vehicle's last completed trip. This
+        forces the vehicle to arrive empty before a new trip can start, so a
+        still-loaded vehicle cannot be booked as a fresh first weighment.
+
+        Returns: (allowed, message)
+          allowed is True  -> capture may proceed (message is "")
+          allowed is False -> block the capture and show `message`
+        """
+        try:
+            vehicle_no = (vehicle_no or "").strip().upper()
+            new_weight = self._to_float(new_weight)
+
+            # Missing inputs are handled by other validation - do not block here
+            if not vehicle_no or new_weight is None:
+                return True, ""
+
+            prev_min = self.get_previous_trip_min_weight(vehicle_no)
+
+            if prev_min is None:
+                # First-ever trip for this vehicle - nothing to compare against
+                self.logger.info(
+                    f"First-weight check skipped for {vehicle_no}: no previous trip"
+                )
+                return True, ""
+
+            if prev_min <= 0:
+                # Bad reference data - do not block, but record it
+                self.logger.warning(
+                    f"First-weight check skipped for {vehicle_no}: "
+                    f"previous trip min weight is {prev_min}"
+                )
+                return True, ""
+
+            variance = prev_min * (variance_pct / 100.0)
+            low = prev_min - variance
+            high = prev_min + variance
+
+            if low <= new_weight <= high:
+                self.logger.info(
+                    f"First-weight check OK for {vehicle_no}: {new_weight:.0f} kg "
+                    f"within [{low:.0f}, {high:.0f}] (previous empty {prev_min:.0f} kg)"
+                )
+                return True, ""
+
+            message = (
+                f"Operation not allowed.\n\n"
+                f"Vehicle {vehicle_no} last started a trip at "
+                f"{prev_min:.0f} kg (empty weight).\n\n"
+                f"The new first weight {new_weight:.0f} kg is outside the "
+                f"allowed range of {low:.0f} - {high:.0f} kg "
+                f"(\u00b1{variance_pct:.0f}%).\n\n"
+                f"The vehicle must arrive empty before a new trip can be "
+                f"started. Please verify the vehicle and the weighbridge reading."
+            )
+            self.logger.warning(
+                f"First-weight check FAILED for {vehicle_no}: {new_weight:.0f} kg "
+                f"outside [{low:.0f}, {high:.0f}]"
+            )
+            return False, message
+
+        except Exception as e:
+            # Fail open: a bug in this check must not halt the weighbridge.
+            # Change to `return False, "..."` if you prefer fail-closed.
+            self.logger.error(f"Error in check_new_first_weight: {e}")
+            return True, ""
+
     def _setup_fallback_folders(self):
         """Setup fallback folders when main setup fails"""
         try:
@@ -1047,21 +1166,13 @@ class DataManager:
             archive_filename = f"archive_{timestamp}_{len(archive_records)}records_before_{cutoff_date_str.replace('-', '')}.csv"
             archive_path = os.path.join(archives_folder, archive_filename)
             
-            # Write archive with records from 2+ days ago
-            with open(archive_path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow(config.CSV_HEADER)
-                for record in archive_records:
-                    writer.writerow(record)
-            
+            # Write archive with records from 2+ days ago (atomic, crash-safe)
+            atomic_write_csv(archive_path, config.CSV_HEADER, archive_records)
+
             self.logger.info(f" Created archive: {archive_filename}")
-            
-            # Create fresh CSV with recent and incomplete records
-            with open(current_file, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow(config.CSV_HEADER)
-                for record in keep_records:
-                    writer.writerow(record)
+
+            # Create fresh CSV with recent and incomplete records (atomic, crash-safe)
+            atomic_write_csv(current_file, config.CSV_HEADER, keep_records)
             
             self.logger.info(f" Fresh CSV created with {len(keep_records)} records (recent + incomplete)")
             
@@ -1487,9 +1598,7 @@ GENERATED BY: Swaccha Andhra Corporation Weighbridge System
             # Create new file with updated header
             try:
                 os.makedirs(os.path.dirname(current_file), exist_ok=True)
-                with open(current_file, 'w', newline='', encoding='utf-8') as csv_file:
-                    writer = csv.writer(csv_file)
-                    writer.writerow(config.CSV_HEADER)
+                atomic_write_csv(current_file, config.CSV_HEADER, [])
                 self.logger.info(f"Created new CSV file: {current_file}")
             except Exception as e:
                 self.logger.error(f"Error creating CSV file: {e}")
@@ -1515,39 +1624,34 @@ GENERATED BY: Swaccha Andhra Corporation Weighbridge System
             shutil.copy2(current_file, backup_file)
             self.logger.info(f"Created backup: {backup_file}")
             
-            # Create new file with updated structure
-            with open(current_file, 'w', newline='', encoding='utf-8') as csv_file:
-                writer = csv.writer(csv_file)
-                
-                # Write new header
-                writer.writerow(config.CSV_HEADER)
-                
-                # Migrate old data - map old fields to new structure
-                for row in data:
-                    if len(row) >= 12:  # Ensure we have minimum fields
-                        new_row = [
-                            row[0],  # Date
-                            row[1],  # Time
-                            row[2],  # Site Name
-                            row[3],  # Agency Name
-                            row[4],  # Material
-                            row[5],  # Ticket No
-                            row[6],  # Vehicle No
-                            row[7],  # Transfer Party Name
-                            row[8] if len(row) > 8 else "",  # Gross Weight -> First Weight
-                            "",      # First Timestamp (new field)
-                            row[9] if len(row) > 9 else "",  # Tare Weight -> Second Weight
-                            "",      # Second Timestamp (new field)
-                            row[10] if len(row) > 10 else "",  # Net Weight
-                            row[11] if len(row) > 11 else "",  # Material Type
-                            row[12] if len(row) > 12 else "",  # First Front Image
-                            row[13] if len(row) > 13 else "",  # First Back Image
-                            row[14] if len(row) > 14 else "",  # Second Front Image
-                            row[15] if len(row) > 15 else "",  # Second Back Image
-                            row[16] if len(row) > 16 else "",  # Site Incharge
-                            row[17] if len(row) > 17 else ""   # User Name
-                        ]
-                        writer.writerow(new_row)
+            # Create new file with updated structure (atomic, crash-safe)
+            migrated = []
+            for row in data:
+                if len(row) >= 12:  # Ensure we have minimum fields
+                    new_row = [
+                        row[0],  # Date
+                        row[1],  # Time
+                        row[2],  # Site Name
+                        row[3],  # Agency Name
+                        row[4],  # Material
+                        row[5],  # Ticket No
+                        row[6],  # Vehicle No
+                        row[7],  # Transfer Party Name
+                        row[8] if len(row) > 8 else "",  # Gross Weight -> First Weight
+                        "",      # First Timestamp (new field)
+                        row[9] if len(row) > 9 else "",  # Tare Weight -> Second Weight
+                        "",      # Second Timestamp (new field)
+                        row[10] if len(row) > 10 else "",  # Net Weight
+                        row[11] if len(row) > 11 else "",  # Material Type
+                        row[12] if len(row) > 12 else "",  # First Front Image
+                        row[13] if len(row) > 13 else "",  # First Back Image
+                        row[14] if len(row) > 14 else "",  # Second Front Image
+                        row[15] if len(row) > 15 else "",  # Second Back Image
+                        row[16] if len(row) > 16 else "",  # Site Incharge
+                        row[17] if len(row) > 17 else ""   # User Name
+                    ]
+                    migrated.append(new_row)
+            atomic_write_csv(current_file, config.CSV_HEADER, migrated)
                         
             self.logger.info("Database structure updated successfully")
             if messagebox:
@@ -1770,10 +1874,8 @@ GENERATED BY: Swaccha Andhra Corporation Weighbridge System
             # Ensure the directory exists
             os.makedirs(os.path.dirname(current_file), exist_ok=True)
             
-            # Write to CSV
-            with open(current_file, 'a', newline='', encoding='utf-8') as csv_file:
-                writer = csv.writer(csv_file)
-                writer.writerow(record)
+            # Durable append; keeps the file read-only afterwards
+            append_csv_row(current_file, record, header=config.CSV_HEADER)
             
             self.logger.info(f" New record added to {current_file}")
             return True
@@ -1848,33 +1950,14 @@ GENERATED BY: Swaccha Andhra Corporation Weighbridge System
                 self.logger.warning(f"Record with ticket {ticket_no} not found, adding as new record")
                 return self.add_new_record(data)
                 
-            # Write all records back to the file
+            # Write all records back atomically (crash-safe; never truncates the live file)
             try:
-                # Create backup before updating
-                backup_file = f"{current_file}.backup"
-                if os.path.exists(current_file):
-                    shutil.copy2(current_file, backup_file)
-                
-                with open(current_file, 'w', newline='', encoding='utf-8') as csv_file:
-                    writer = csv.writer(csv_file)
-                    if header:
-                        writer.writerow(header)  # Write header
-                    writer.writerows(all_records)  # Write all records
-                
-                # Remove backup if write was successful
-                if os.path.exists(backup_file):
-                    os.remove(backup_file)
-                    
+                atomic_write_csv(current_file, header or config.CSV_HEADER, all_records)
                 self.logger.info(f" Record {ticket_no} updated in {current_file}")
                 return True
             except Exception as write_error:
                 self.logger.error(f"Error writing updated records: {write_error}")
-                # Restore from backup if write failed
-                backup_file = f"{current_file}.backup"
-                if os.path.exists(backup_file):
-                    shutil.copy2(backup_file, current_file)
-                    os.remove(backup_file)
-                    self.logger.info("Restored from backup due to write error")
+                # atomic_write_csv leaves the original file intact on failure - nothing to restore
                 return False
                 
         except Exception as e:

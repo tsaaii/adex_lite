@@ -43,6 +43,7 @@ import os
 import datetime
 import threading
 import logging
+from csv_safe_io import cleanup_stale_temp_files
 from tkinter import ttk, messagebox
 from pending_vehicles_panel import PendingVehiclesPanel
 import config
@@ -142,6 +143,14 @@ class TharuniApp:
             # Set up initial configuration
             config.setup()
             self.logger.info("Configuration setup completed")
+
+            # Clean up leftover temp files from an interrupted write (e.g. power loss)
+            try:
+                stale = cleanup_stale_temp_files(config.DATA_FOLDER)
+                if stale:
+                    self.logger.warning(f"Removed {len(stale)} stale temp file(s) from an interrupted write")
+            except Exception as cleanup_err:
+                self.logger.error(f"Temp-file cleanup failed: {cleanup_err}")
             
             # Initialize data manager with auto PDF generation
             self.data_manager = DataManager()
