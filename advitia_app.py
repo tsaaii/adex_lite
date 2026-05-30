@@ -2,7 +2,7 @@
 # pyinstaller ^
 #   --onedir ^
 #   --windowed ^
-#   --name="SAC_monitor_Geron_Giddalur" ^
+#   --name="SAC_monitor_Tharuni_Markapuram" ^
 #   --add-data "assets/logo.png;assets" ^
 #   --icon=right.ico ^
 #   --add-data "data;data" ^

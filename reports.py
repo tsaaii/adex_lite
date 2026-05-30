@@ -1226,7 +1226,7 @@ class ReportGenerator:
                 
                 # ENHANCED: Create table with NEW COLUMN STRUCTURE and PROPER NAMING
                 # Final headers: S.NO, DATE, SLIP NO, VEHICLE NO, GROSS, IN_TIME, TARE, OUT_TIME, NET WT
-                table_data = [['S.NO', 'DATE', 'SLIP NO', 'VEHICLE NO', 'GROSS', 'IN_TIME', 'TARE', 'OUT_TIME', 'NET WT']]
+                table_data = [['S.NO', 'DATE', 'SLIP NO', 'VEHICLE NO', 'First Wt', 'IN_TIME', 'Second Wt', 'OUT_TIME', 'NET WT']]
                 
                 for j, record in enumerate(material_records, 1):
                     # Extract data with proper formatting

@@ -56,7 +56,8 @@ class SettingsStorage:
                     "ticket_prefix": "T",
                     "ticket_digits": 4,
                     "last_reset_date": ""
-                }
+                },
+                "watermark_font_size": 0.7
             }
             os.makedirs(os.path.dirname(self.settings_file), exist_ok=True)
             with open(self.settings_file, 'w') as f:
@@ -125,6 +126,11 @@ class SettingsStorage:
                         "ticket_digits": 4,
                         "last_reset_date": ""
                     }
+                    updated = True
+                
+                # Add watermark font size if missing
+                if "watermark_font_size" not in settings:
+                    settings["watermark_font_size"] = 0.7
                     updated = True
                 
                 if updated:

@@ -678,6 +678,28 @@ class RobustCameraView:
 ContinuousCameraView = RobustCameraView
 CameraView = RobustCameraView
 
+def _get_watermark_font_size(default=0.7):
+    """Return the watermark font size from app_settings.json, or `default`.
+
+    If the "watermark_font_size" key is present and valid in app_settings.json
+    it takes precedence; any problem reading or validating it falls back to
+    `default` (the size hard-coded below). Lets the size be changed without
+    editing this script.
+    """
+    try:
+        import json
+        settings_path = os.path.join(config.DATA_FOLDER, "app_settings.json")
+        with open(settings_path, "r", encoding="utf-8") as f:
+            settings = json.load(f)
+        value = settings.get("watermark_font_size", None)
+        if value is None:
+            return default
+        value = float(value)
+        return value if value > 0 else default
+    except Exception:
+        return default
+
+
 # Watermark function with quality preservation
 def add_watermark(image, text, ticket_id=None):
     """Add a watermark to an image with sitename, vehicle number, timestamp, and image description in 2 lines at top, and ticket at bottom
@@ -688,7 +710,7 @@ def add_watermark(image, text, ticket_id=None):
     height, width = result.shape[:2]
     
     font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.7
+    font_scale = _get_watermark_font_size(0.7)  # app_settings.json -> watermark_font_size (fallback 0.7)
     color = (255, 255, 255)
     thickness = 2
     line_spacing = 8  # Space between lines
